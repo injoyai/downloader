@@ -1,4 +1,5 @@
 ## m3u8资源下载工具
+* 为了减小体积,使用了upx进行压缩,可能会报毒
 * 提供图形界面,使用fyne.io/fyne/v2(https://fyne.io/fyne/v2)实现,不能显示中文
 * 目前只支持m3u8资源下载
 * 如果不需要GUI,可以直接作为包使用, download.New()
