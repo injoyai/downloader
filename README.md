@@ -13,7 +13,8 @@
 ## 使用说明
 * [版本下载](https://github.com/injoyai/downloader/releases )
 * 运行,如果安装了Chrome,工具会下载chromedriver.exe到根目录,提供爬虫功能,能爬取普通网页(支持js,动态加载)的所有m3u8资源
-* download url 是下载地址(http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8),或者普通网页地址(https://www.wangfei.tv/vodplay/302601-3-1.html)
+* download url 是下载地址(例 http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8)
+* 或者普通网页地址(例 https://www.wangfei.tv/vodplay/302601-3-1.html)
 * download dir 是保存位置,暂不支持记忆(下次打开会重置)
 * download name 是重命名文件(可选,xx,xx.ts,xx.mp4) ,存在相同名字文件会被覆盖
 * 等待进度条完成,或显示Download success Used xxx ,则完成下载
