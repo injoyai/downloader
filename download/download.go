@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-func NewDownloader(op *Option) *Downloader {
-	return NewDownloaderWithContext(context.Background(), op)
+func New(op *Option) *Downloader {
+	return NewWithContext(context.Background(), op)
 }
 
-func NewDownloaderWithContext(ctx context.Context, op *Option) *Downloader {
+func NewWithContext(ctx context.Context, op *Option) *Downloader {
 	op = op.new()
 	ctx, cancel := context.WithCancel(ctx)
 	return &Downloader{

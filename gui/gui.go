@@ -132,7 +132,7 @@ func onclick(b *Button, s *Scroll, text, downloadPath, filename string) (err err
 				return
 			}
 
-			d := download.NewDownloader(nil)
+			d := download.New(nil)
 
 			d.Bar().SetPrefix("plan:").
 				SetPrint(func(x string) {
