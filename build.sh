@@ -1,6 +1,5 @@
 
-#
-# -X gitee.com/injoyai/goutil/main.Test=50
+
 
 name="gui"
 GOOS=windows GOARCH=amd64 go build -v -ldflags="-w -s -H windowsgui" -o ./$name.exe

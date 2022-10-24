@@ -28,7 +28,6 @@ func Download() {
 }
 
 func makeMainTab() *fyne.Container {
-
 	_input := NewInput("address")
 	_inputDir := NewInput("./")
 	_inputFilename := NewInput("")
@@ -56,7 +55,7 @@ func makeMainTab() *fyne.Container {
 }
 
 func findUrl(u string) ([]string, error) {
-	urls := []string{}
+	urls := []string(nil)
 	if strings.Contains(u, ".m3u8") {
 		return []string{u}, nil
 	}
@@ -94,7 +93,9 @@ func onclick(b *Button, s *Scroll, text, downloadPath, filename string) (err err
 	if len(downloadPath) == 0 {
 		downloadPath = "./"
 	}
-	os.MkdirAll(downloadPath, 0777)
+	if err := os.MkdirAll(downloadPath, 0777); err != nil {
+		return err
+	}
 
 	b.SetText("Stop")
 
