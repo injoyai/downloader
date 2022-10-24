@@ -12,7 +12,7 @@
 * 部分网站的资源后缀会显示.png
 
 ## 使用说明
-* [版本下载](https://github.com/injoyai/downloader/releases )
+* [版本下载.windows](https://github.com/injoyai/downloader/releases )
 * 运行,如果安装了Chrome,工具会下载chromedriver.exe到根目录,提供爬虫功能,能爬取普通网页(支持js,动态加载)的所有m3u8资源
 * download url 是下载地址(例 http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8)
 * 或者普通网页地址(例 https://www.wangfei.tv/vodplay/302601-3-1.html)
