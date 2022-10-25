@@ -74,7 +74,7 @@ func (this *Entity) Run(fn func(i IPage)) (err error) {
 			}
 		}
 		log.Println("[信息] 执行结束...")
-		<-time.After(time.Second * 20)
+		//<-time.After(time.Second * 20)
 	}()
 
 	//如果seleniumServer没有启动，就启动一个seleniumServer所需要的参数，可以为空，示例请参见https://github.com/tebeka/selenium/blob/master/example_test.go
