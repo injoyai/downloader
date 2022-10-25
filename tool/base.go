@@ -4,8 +4,8 @@ import (
 	"archive/zip"
 )
 
-// Decode 解压zip
-func Decode(zipPath, filePath string) error {
+// DecodeZip 解压zip
+func DecodeZip(zipPath, filePath string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err

@@ -29,7 +29,7 @@ func Download() {
 
 func makeMainTab() *fyne.Container {
 	_input := NewInput("address")
-	_inputDir := NewInput("./")
+	_inputDir := NewInput(tool.Cfg.Dir())
 	_inputFilename := NewInput("")
 	_scroll := NewScroll().SetSize(600, 200)
 	_button := NewButton("Start").SetOnclick(func(b *Button) {
@@ -89,11 +89,17 @@ func findUrl(u string) ([]string, error) {
 	return urls, nil
 }
 
-func onclick(b *Button, s *Scroll, text, downloadPath, filename string) (err error) {
-	if len(downloadPath) == 0 {
-		downloadPath = "./"
+func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err error) {
+	if len(downloadDir) == 0 {
+		downloadDir = tool.Cfg.Dir()
 	}
-	if err := os.MkdirAll(downloadPath, 0777); err != nil {
+
+	if tool.Cfg.Dir() != downloadDir {
+		tool.Cfg.DownloadDir = downloadDir
+		tool.Cfg.Save()
+	}
+
+	if err := os.MkdirAll(downloadDir, 0777); err != nil {
 		return err
 	}
 
@@ -126,7 +132,7 @@ func onclick(b *Button, s *Scroll, text, downloadPath, filename string) (err err
 			} else if !strings.Contains(filename, ".") {
 				filename += filepath.Ext(l.Filename())
 			}
-			f, err := os.Create(downloadPath + filename)
+			f, err := os.Create(downloadDir + filename)
 			if err != nil {
 				list[i] = err.Error()
 				return

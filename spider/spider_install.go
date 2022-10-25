@@ -44,7 +44,7 @@ func Install() error {
 		if err := tool.NewFile(zipPath, bs); err != nil {
 			return err
 		}
-		if err := tool.Decode(zipPath, "./"); err != nil {
+		if err := tool.DecodeZip(zipPath, "./"); err != nil {
 			return err
 		}
 		if err := os.Remove(zipPath); err != nil {
