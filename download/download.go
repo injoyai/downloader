@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/injoyai/downloader/tool"
 	"io"
-	"log"
 	"sync"
 	"time"
 )
@@ -109,7 +108,6 @@ func (this *Downloader) Run(list Task, writer io.Writer) []error {
 	go this.bar.Wait()
 	time.Sleep(time.Second)
 	wg.Wait()
-	log.Println("下载完成...")
 	return this.err
 }
 

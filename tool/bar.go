@@ -108,7 +108,7 @@ func (this *Bar) Wait() <-chan uintptr {
 			width := strconv.Itoa(this.length)
 			//if this.color > 0 {
 			//s = color.Set(this.color, s)
-			width = strconv.Itoa(this.length + 10)
+			//width = strconv.Itoa(this.length + 10)
 			//}
 			s = fmt.Sprintf("\r%s[%-"+width+"s] %0.1f%% %0.0f/%0.0f %s", this.prefix, s, this.nowSize*100/this.maxSize, this.nowSize, this.maxSize, this.suffix)
 			if this.print != nil {

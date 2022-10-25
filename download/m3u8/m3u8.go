@@ -120,10 +120,10 @@ func (this *Info) Decode() (list []*Info, err error) {
 		if strings.HasPrefix(v, "http") {
 			list = append(list, &Info{idx: idx, Url: v, Key: this.Key})
 			idx++
-		} else if strings.HasSuffix(v, ".ts") || strings.HasSuffix(v, ".png") {
+		} else if strings.Contains(v, ".ts") || strings.Contains(v, ".png") {
 			list = append(list, &Info{idx: idx, Url: this.prefix() + v, Key: this.Key})
 			idx++
-		} else if strings.HasSuffix(v, ".m3u8") {
+		} else if strings.Contains(v, ".m3u8") {
 			if strings.Index(v, "/") > 1 {
 				i := &Info{Url: this.prefix() + v}
 				return i.Decode()
@@ -137,7 +137,8 @@ func (this *Info) Decode() (list []*Info, err error) {
 }
 
 func (this *Info) Filename(name ...string) string {
-	fileName := filepath.Base(this.Url)
+	url := tool.CropLast(this.Url, "?", false)
+	fileName := filepath.Base(url)
 	fileName = strings.ReplaceAll(fileName, filepath.Ext(fileName), ".ts")
 	if len(name) > 0 {
 		fileName = name[0]

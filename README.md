@@ -8,8 +8,13 @@
 * ![](doc/downloader.png)
 * 下载完成后,默认后缀为.ts,修改成mp4也可
 * 显示下载进度,下载用时
-* 多个协程下载,默认20个,释放太多部分网站会请求失败
-* 部分网站的资源后缀会显示.png
+* 测试结果
+
+  |网站|m3u8|html|
+  |---|---|---|
+  |任意.m3u8资源|通过|X|
+  |https://www.acfun.cn|通过|通过|
+  |https://www.wangfei.tv|通过|通过|
 
 ## 使用说明
 * [版本下载.windows](https://github.com/injoyai/downloader/releases )

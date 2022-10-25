@@ -10,6 +10,7 @@ import (
 	"github.com/injoyai/downloader/download/m3u8"
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/downloader/tool"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,7 +24,7 @@ func Download() {
 	application := app.New()
 	window := application.NewWindow("Downloader")
 	window.SetContent(makeMainTab())
-	window.Resize(fyne.NewSize(600, 300))
+	window.Resize(fyne.NewSize(600, 400))
 	window.ShowAndRun()
 }
 
@@ -33,13 +34,11 @@ func makeMainTab() *fyne.Container {
 	_inputFilename := NewInput("")
 	_scroll := NewScroll().SetSize(600, 200)
 	_button := NewButton("Start").SetOnclick(func(b *Button) {
-		_time := time.Now()
 		err := onclick(b, _scroll, _input.Text, _inputDir.Text, _inputFilename.Text)
 		if err != nil {
 			_scroll.SetText(err.Error())
 			return
 		}
-		_scroll.SetText("Download success  Used " + time.Now().Sub(_time).String())
 	})
 	_button.Resize(fyne.NewSize(600, 200))
 	return container.NewVBox(
@@ -55,6 +54,7 @@ func makeMainTab() *fyne.Container {
 }
 
 func findUrl(u string) ([]string, error) {
+
 	urls := []string(nil)
 	if strings.Contains(u, ".m3u8") {
 		return []string{u}, nil
@@ -67,7 +67,7 @@ func findUrl(u string) ([]string, error) {
 		p := i.Open(u)
 		p.WaitSec(3)
 		for x := 0; x < 5; x++ {
-			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/\-.]+\.m3u8`).FindAllString(p.String(), -1)
+			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.]+\.m3u8\?[a-zAA-Z0-9/=_\-.]+`).FindAllString(p.String(), -1)
 			if len(urls) > 0 {
 				break
 			}
@@ -75,14 +75,30 @@ func findUrl(u string) ([]string, error) {
 		}
 	})
 
-	for _, v := range urls {
-		if strings.Contains(v, `//test.`) {
-			host := tool.CropLast(v, "/")
-			bs, _ := tool.GetBytes(host)
-			s := regexp.MustCompile(`>(.*?)\.m3u8<`).FindString(string(bs))
-			s = tool.CropFirst(s, ">", false)
-			s = tool.CropLast(s, "<", false)
-			v = host + s
+	{ //去除重复地址
+		m := make(map[string]string)
+		for _, v := range urls {
+			u, err := url.Parse(v)
+			if err == nil {
+				m[u.Path] = v
+			}
+		}
+		urls = []string{}
+		for _, m3u8Url := range m {
+			urls = append(urls, m3u8Url)
+		}
+	}
+
+	{ //特殊处理网站
+		for _, v := range urls {
+			if strings.Contains(v, `//test.`) {
+				host := tool.CropLast(v, "/")
+				bs, _ := tool.GetBytes(host)
+				s := regexp.MustCompile(`>(.*?)\.m3u8<`).FindString(string(bs))
+				s = tool.CropFirst(s, ">", false)
+				s = tool.CropLast(s, "<", false)
+				v = host + s
+			}
 		}
 	}
 
@@ -118,8 +134,9 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 	wg := sync.WaitGroup{}
 	for i, url := range urls {
 		wg.Add(1)
-		go func(i int, url string) {
+		go func(i int, url, filename string) {
 			defer wg.Done()
+			start := time.Now()
 			list[i] = url
 			s.SetText(strings.Join(list, "\n"))
 			l, err := m3u8.NewTask(url)
@@ -130,8 +147,9 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 			if len(filename) == 0 {
 				filename = l.Filename()
 			} else if !strings.Contains(filename, ".") {
-				filename += filepath.Ext(l.Filename())
+				filename += "_" + strconv.Itoa(i) + filepath.Ext(l.Filename())
 			}
+
 			f, err := os.Create(downloadDir + filename)
 			if err != nil {
 				list[i] = err.Error()
@@ -140,7 +158,7 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 
 			d := download.New(nil)
 
-			d.Bar().SetPrefix("plan:").
+			d.Bar().SetPrefix("").
 				SetPrint(func(x string) {
 					list[i] = x
 					s.SetText(strings.Join(list, "\n"))
@@ -151,10 +169,10 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 			if len(errs) > 0 {
 				list[i] = errs[0].Error()
 			} else {
-				list[i] = "Success"
+				list[i] = "Success takes " + time.Now().Sub(start).String()
 			}
 			s.SetText(strings.Join(list, "\n"))
-		}(i, url)
+		}(i, url, filename)
 	}
 	wg.Wait()
 	return nil
@@ -171,7 +189,8 @@ func NewLabel(text string) *widget.Label {
 func NewScroll() *Scroll {
 	e := widget.NewMultiLineEntry()
 	e.Disable()
-	slo := container.NewScroll(e)
+	e.SetMinRowsVisible(6)
+	slo := container.NewHScroll(e)
 	return &Scroll{
 		e:      e,
 		Scroll: slo,
