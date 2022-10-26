@@ -64,11 +64,11 @@ func (this *Downloader) runTask(t Item) (bytes []byte, err error) {
 func (this *Downloader) Run(list Task, writer io.Writer) []error {
 	this.bar.SetSize(float64(list.Len()))
 	this.queue = make(chan Item, list.Len())
-	cache := make([][]byte, list.Len()+1)
+	cache := make([][]byte, list.Len()) //+1)
 	for _, v := range list.List() {
 		this.queue <- v
 	}
-	idx := 0
+	//idx := 0
 	wg := sync.WaitGroup{}
 	ch := make(chan byte, this.limit)
 	fn := func(ctx context.Context, c chan Item) {
@@ -90,14 +90,6 @@ func (this *Downloader) Run(list Task, writer io.Writer) []error {
 						this.addErr(err)
 						if err == nil {
 							cache[i.Idx()] = bytes
-							for {
-								if bs := cache[idx]; bs != nil {
-									writer.Write(bs)
-									idx++
-									continue
-								}
-								break
-							}
 						}
 					}(i)
 				}
@@ -108,6 +100,9 @@ func (this *Downloader) Run(list Task, writer io.Writer) []error {
 	go this.bar.Wait()
 	time.Sleep(time.Second)
 	wg.Wait()
+	for _, bs := range cache {
+		writer.Write(bs)
+	}
 	return this.err
 }
 

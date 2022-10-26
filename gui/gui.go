@@ -2,6 +2,7 @@ package gui
 
 import (
 	"errors"
+	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -66,6 +67,18 @@ func findUrl(u string) ([]string, error) {
 	spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
+
+		{ //处理91pron
+			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
+			for _, v := range list {
+				num := v[4:]
+				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
+			}
+			if len(list) > 0 {
+				return
+			}
+		}
+
 		for x := 0; x < 5; x++ {
 			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`).FindAllString(p.String(), -1)
 			if len(urls) > 0 {
