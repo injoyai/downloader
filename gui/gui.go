@@ -67,7 +67,7 @@ func findUrl(u string) ([]string, error) {
 		p := i.Open(u)
 		p.WaitSec(3)
 		for x := 0; x < 5; x++ {
-			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.]+\.m3u8\?[a-zAA-Z0-9/=_\-.]+`).FindAllString(p.String(), -1)
+			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`).FindAllString(p.String(), -1)
 			if len(urls) > 0 {
 				break
 			}
