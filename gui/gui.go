@@ -80,7 +80,13 @@ func findUrl(u string) ([]string, error) {
 			}
 		}
 
-		urls = m3u8.RegexpAll(p.String())
+		for x := 0; x < 5; x++ {
+			urls = m3u8.RegexpAll(p.String())
+			if len(urls) > 0 {
+				break
+			}
+			p.WaitSec(1)
+		}
 		iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
 		tool.PanicErr(err)
 		for _, v := range iframes {
