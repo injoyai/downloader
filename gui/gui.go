@@ -11,6 +11,7 @@ import (
 	"github.com/injoyai/downloader/download/m3u8"
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/downloader/tool"
+	"github.com/tebeka/selenium"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -64,7 +65,7 @@ func findUrl(u string) ([]string, error) {
 	if !strings.Contains(u, "http") {
 		return nil, errors.New("invalid url")
 	}
-	spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
+	if err := spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
 
@@ -79,14 +80,18 @@ func findUrl(u string) ([]string, error) {
 			}
 		}
 
-		for x := 0; x < 5; x++ {
-			urls = regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`).FindAllString(p.String(), -1)
-			if len(urls) > 0 {
-				break
-			}
-			p.WaitSec()
+		urls = m3u8.RegexpAll(p.String())
+		iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
+		tool.PanicErr(err)
+		for _, v := range iframes {
+			tool.PanicErr(p.SwitchFrame(v))
+			urls = append(urls, m3u8.RegexpAll(p.String())...)
+			tool.PanicErr(p.SwitchFrame(nil))
 		}
-	})
+
+	}); err != nil {
+		return nil, err
+	}
 
 	{ //去除重复地址
 		m := make(map[string]string)
@@ -128,11 +133,10 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 		tool.Cfg.Save()
 	}
 
+	// 不存在则生成保存的文件夹
 	if err := os.MkdirAll(downloadDir, 0777); err != nil {
 		return err
 	}
-
-	b.SetText("Stop")
 
 	if len(text) == 0 {
 		return errors.New("invalid url")
@@ -142,6 +146,10 @@ func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err erro
 	urls, err := findUrl(text)
 	if err != nil {
 		return err
+	}
+	if len(urls) == 0 {
+		s.SetText("no resource")
+		return
 	}
 	list := make([]string, len(urls))
 	wg := sync.WaitGroup{}

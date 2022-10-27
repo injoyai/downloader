@@ -9,9 +9,16 @@ import (
 	"log"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
+
+const RegUrl = `(http://|https://)[a-zAA-Z0-9/=_\-.:]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`
+
+func RegexpAll(s string) []string {
+	return regexp.MustCompile(RegUrl).FindAllString(s, -1)
+}
 
 func newKey(host, v string) (key *Key, err error) {
 	v = tool.CropFirst(v, "#EXT-X-KEY:", false)

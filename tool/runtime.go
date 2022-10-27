@@ -18,3 +18,9 @@ func Recover(err *error, stack ...bool) {
 		}
 	}
 }
+
+func PanicErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
