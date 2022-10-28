@@ -151,7 +151,7 @@ func onclick(s *Scroll, url, downloadDir, filename string, prompt bool) (err err
 
 	defer func() {
 		if prompt {
-			tool.Speak(fmt.Sprintf("叮咚. 你的视频%s已下载完成", filename))
+			tool.Speak("叮咚. 你的视频已下载完成")
 		}
 	}()
 
