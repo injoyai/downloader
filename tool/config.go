@@ -3,10 +3,14 @@ package tool
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os/user"
 )
 
-const (
-	cfgPath = "./config/config.json"
+var (
+	cfgPath = func() string {
+		u, _ := user.Current()
+		return u.HomeDir + "/AppData/Local/downloader/config.json"
+	}()
 )
 
 var Cfg = func() *cfg {
@@ -17,6 +21,7 @@ var Cfg = func() *cfg {
 }()
 
 type cfg struct {
+	Prompt      bool   `json:"prompt"`      //提示音
 	DownloadDir string `json:"downloadDir"` //下载地址
 }
 

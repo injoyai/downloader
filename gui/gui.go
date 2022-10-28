@@ -34,12 +34,12 @@ func makeMainTab() *fyne.Container {
 	_input := NewInput("address")
 	_inputDir := NewInput(tool.Cfg.Dir())
 	_inputFilename := NewInput("")
+	_voice := NewRadio([]string{"voice"})
 	_scroll := NewScroll().SetSize(600, 200)
 	_button := NewButton("Start").SetOnclick(func(b *Button) {
-		err := onclick(b, _scroll, _input.Text, _inputDir.Text, _inputFilename.Text)
+		err := onclick(_scroll, _input.Text, _inputDir.Text, _inputFilename.Text, _voice.Selected == "voice")
 		if err != nil {
 			_scroll.SetText(err.Error())
-			return
 		}
 	})
 	_button.Resize(fyne.NewSize(600, 200))
@@ -50,6 +50,7 @@ func makeMainTab() *fyne.Container {
 		_inputDir,
 		NewLabel("download name"),
 		_inputFilename,
+		_voice,
 		_button,
 		_scroll,
 	)
@@ -69,7 +70,8 @@ func findUrl(u string) ([]string, error) {
 		p := i.Open(u)
 		p.WaitSec(3)
 
-		{ //处理91pron
+		switch {
+		case strings.Contains(u, "91pron"): //处理91pron
 			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
 			for _, v := range list {
 				num := v[4:]
@@ -80,13 +82,7 @@ func findUrl(u string) ([]string, error) {
 			}
 		}
 
-		for x := 0; x < 5; x++ {
-			urls = m3u8.RegexpAll(p.String())
-			if len(urls) > 0 {
-				break
-			}
-			p.WaitSec(1)
-		}
+		urls = m3u8.RegexpAll(p.String())
 		iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
 		tool.PanicErr(err)
 		for _, v := range iframes {
@@ -129,34 +125,36 @@ func findUrl(u string) ([]string, error) {
 	return urls, nil
 }
 
-func onclick(b *Button, s *Scroll, text, downloadDir, filename string) (err error) {
-	if len(downloadDir) == 0 {
-		downloadDir = tool.Cfg.Dir()
-	}
+func onclick(s *Scroll, url, downloadDir, filename string, prompt bool) (err error) {
 
-	if tool.Cfg.Dir() != downloadDir {
+	defer tool.Recover(&err)
+
+	if downloadDir != tool.Cfg.Dir() || prompt != tool.Cfg.Prompt {
 		tool.Cfg.DownloadDir = downloadDir
+		tool.Cfg.Prompt = prompt
 		tool.Cfg.Save()
 	}
 
 	// 不存在则生成保存的文件夹
-	if err := os.MkdirAll(downloadDir, 0777); err != nil {
-		return err
-	}
+	tool.PanicErr(os.MkdirAll(tool.Cfg.Dir(), 0777))
 
-	if len(text) == 0 {
+	if len(url) == 0 {
 		return errors.New("invalid url")
 	}
 
-	s.SetText(text)
-	urls, err := findUrl(text)
-	if err != nil {
-		return err
-	}
+	s.SetText(url)
+	urls, err := findUrl(url)
+	tool.PanicErr(err)
 	if len(urls) == 0 {
-		s.SetText("no resource")
-		return
+		tool.PanicErr("not find resource")
 	}
+
+	defer func() {
+		if prompt {
+			tool.Speak(fmt.Sprintf("叮咚. 你的视频%s已下载完成", filename))
+		}
+	}()
+
 	list := make([]string, len(urls))
 	wg := sync.WaitGroup{}
 	for i, url := range urls {

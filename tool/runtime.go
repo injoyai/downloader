@@ -19,7 +19,7 @@ func Recover(err *error, stack ...bool) {
 	}
 }
 
-func PanicErr(err error) {
+func PanicErr(err interface{}) {
 	if err != nil {
 		panic(err)
 	}
