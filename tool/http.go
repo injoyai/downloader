@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-var HTTP = client()
+var HTTP = Client()
 
-func client() *http.Client {
+func Client() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			//连接结束后会直接关闭,

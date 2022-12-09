@@ -142,6 +142,8 @@ func onclick(s *Scroll, url, downloadDir, filename, proxyUrl string, prompt, pro
 
 	if proxy {
 		tool.HTTP = tool.ProxyClient(proxyUrl)
+	} else {
+		tool.HTTP = tool.Client()
 	}
 
 	defer tool.Recover(&err)
