@@ -35,9 +35,15 @@ func makeMainTab() *fyne.Container {
 	_inputDir := NewInput(tool.Cfg.Dir())
 	_inputFilename := NewInput("")
 	_voice := NewRadio([]string{"voice"})
+	_proxy := NewRadio([]string{"proxy"})
+	_inputProxy := NewInput("")
+	_inputProxy.SetText("http://127.0.0.1:1081")
+	if tool.Cfg.Prompt {
+		_voice.SetSelected("voice")
+	}
 	_scroll := NewScroll().SetSize(600, 200)
 	_button := NewButton("Start").SetOnclick(func(b *Button) {
-		err := onclick(_scroll, _input.Text, _inputDir.Text, _inputFilename.Text, _voice.Selected == "voice")
+		err := onclick(_scroll, _input.Text, _inputDir.Text, _inputFilename.Text, _inputProxy.Text, _voice.Selected == "voice", _proxy.Selected == "proxy")
 		if err != nil {
 			_scroll.SetText(err.Error())
 		}
@@ -51,6 +57,8 @@ func makeMainTab() *fyne.Container {
 		NewLabel("download name"),
 		_inputFilename,
 		_voice,
+		_proxy,
+		_inputProxy,
 		_button,
 		_scroll,
 	)
@@ -110,14 +118,19 @@ func findUrl(u string) ([]string, error) {
 	}
 
 	{ //特殊处理网站
-		for _, v := range urls {
+		for i, v := range urls {
 			if strings.Contains(v, `//test.`) {
 				host := tool.CropLast(v, "/")
 				bs, _ := tool.GetBytes(host)
-				s := regexp.MustCompile(`>(.*?)\.m3u8<`).FindString(string(bs))
-				s = tool.CropFirst(s, ">", false)
-				s = tool.CropLast(s, "<", false)
-				v = host + s
+				for _, s := range regexp.MustCompile(`>(.*?)\.m3u8<`).FindAllString(string(bs), -1) {
+					s = tool.CropFirst(s, ">", false)
+					s = tool.CropLast(s, "<", false)
+					if filepath.Base(v) != s {
+						urls[i] = host + s
+						break
+					}
+				}
+
 			}
 		}
 	}
@@ -125,7 +138,11 @@ func findUrl(u string) ([]string, error) {
 	return urls, nil
 }
 
-func onclick(s *Scroll, url, downloadDir, filename string, prompt bool) (err error) {
+func onclick(s *Scroll, url, downloadDir, filename, proxyUrl string, prompt, proxy bool) (err error) {
+
+	if proxy {
+		tool.HTTP = tool.ProxyClient(proxyUrl)
+	}
 
 	defer tool.Recover(&err)
 
@@ -150,7 +167,7 @@ func onclick(s *Scroll, url, downloadDir, filename string, prompt bool) (err err
 	}
 
 	defer func() {
-		if prompt {
+		if tool.Cfg.Prompt {
 			tool.Speak("叮咚. 你的视频已下载完成")
 		}
 	}()
@@ -181,7 +198,9 @@ func onclick(s *Scroll, url, downloadDir, filename string, prompt bool) (err err
 				return
 			}
 
-			d := download.New(nil)
+			d := download.New(&download.Option{
+				Limit: 20,
+			})
 
 			d.Bar().SetPrefix("").
 				SetPrint(func(x string) {

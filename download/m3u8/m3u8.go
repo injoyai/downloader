@@ -95,6 +95,10 @@ func (this *Info) Bytes() []byte {
 }
 
 func (this *Info) Get() error {
+	//start := time.Now()
+	//defer func() {
+	//	log.Println("耗时:", time.Now().Sub(start), this.Url)
+	//}()
 	this.bytes, this.err = tool.GetBytes(this.Url)
 	return this.err
 }
