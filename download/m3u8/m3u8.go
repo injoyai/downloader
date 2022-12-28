@@ -131,7 +131,7 @@ func (this *Info) Decode() (list []*Info, err error) {
 		if strings.HasPrefix(v, "http") {
 			list = append(list, &Info{idx: idx, Url: v, Key: this.Key})
 			idx++
-		} else if strings.Contains(v, ".ts") || strings.Contains(v, ".png") {
+		} else if strings.Contains(v, ".ts") || strings.Contains(v, ".png") || strings.Contains(v, ".mp4") {
 			list = append(list, &Info{idx: idx, Url: this.prefix() + v, Key: this.Key})
 			idx++
 		} else if strings.Contains(v, ".m3u8") {
