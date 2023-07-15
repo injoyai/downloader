@@ -2,6 +2,7 @@ package tool
 
 import (
 	"archive/zip"
+	"github.com/injoyai/goutil/oss"
 )
 
 // DecodeZip 解压zip
@@ -14,11 +15,11 @@ func DecodeZip(zipPath, filePath string) error {
 	for _, k := range r.Reader.File {
 		var err error
 		if k.FileInfo().IsDir() {
-			NewFile(filePath + k.Name[1:])
+			oss.New(filePath + k.Name[1:])
 		} else {
 			r, err := k.Open()
 			if err == nil {
-				err = NewFile(filePath+"/"+k.Name, r)
+				err = oss.New(filePath+"/"+k.Name, r)
 			}
 		}
 		if err != nil {

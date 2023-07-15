@@ -2,6 +2,7 @@ package tool
 
 import (
 	"encoding/json"
+	"github.com/injoyai/goutil/oss"
 	"io/ioutil"
 	"os/user"
 )
@@ -38,5 +39,5 @@ func (this *cfg) Json() string {
 }
 
 func (this *cfg) Save() error {
-	return NewFile(cfgPath, this.Json())
+	return oss.New(cfgPath, this.Json())
 }

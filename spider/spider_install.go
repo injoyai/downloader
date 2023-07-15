@@ -4,22 +4,26 @@ import (
 	"errors"
 	"fmt"
 	"github.com/injoyai/downloader/tool"
+	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/goutil/oss"
+	"github.com/injoyai/goutil/oss/win"
+	"github.com/injoyai/goutil/str"
 	"io/ioutil"
 	"os"
 	"strings"
 )
 
 func Install() error {
-	if tool.FileExists("./chromedriver.exe") {
+	if oss.Exists("./chromedriver.exe") {
 		return nil
 	}
-	appPath := tool.APPPath("chrome.exe")
+	appPath := win.AppPath("chrome.exe")
 	if len(appPath) == 0 {
 		return errors.New("需要安装chrome")
 	}
 
 	version := ""
-	path := tool.CropLast(appPath[0], "\\")
+	path := str.CropLast(appPath[0], "\\")
 	dirs, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err
@@ -36,12 +40,12 @@ func Install() error {
 
 	if list := strings.Split(version, "."); len(list) >= 2 {
 		url := getVersion(list[0])
-		bs, err := tool.GetBytes(url)
+		bs, err := http.GetBytes(url)
 		if err != nil {
 			return err
 		}
 		zipPath := "./chromedriver.zip"
-		if err := tool.NewFile(zipPath, bs); err != nil {
+		if err := oss.New(zipPath, bs); err != nil {
 			return err
 		}
 		if err := tool.DecodeZip(zipPath, "./"); err != nil {

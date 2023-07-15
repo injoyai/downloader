@@ -1,238 +1,169 @@
 package m3u8
 
 import (
-	"bytes"
 	"encoding/hex"
+	"github.com/injoyai/base/bytes/crypt/aes"
 	"github.com/injoyai/downloader/download"
-	"github.com/injoyai/downloader/tool"
-	"io"
-	"log"
+	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/goutil/str"
 	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 )
 
-const RegUrl = `(http://|https://)[a-zAA-Z0-9/=_\-.:]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`
-
 func RegexpAll(s string) []string {
-	return regexp.MustCompile(RegUrl).FindAllString(s, -1)
+	return regexp.MustCompile(`(http://|https://)[a-zAA-Z0-9/=_\-.:]+\.m3u8(|\?[a-zAA-Z0-9/=_\-.]+)`).FindAllString(s, -1)
 }
 
-func newKey(host, v string) (key *Key, err error) {
-	v = tool.CropFirst(v, "#EXT-X-KEY:", false)
-	key = new(Key)
-	for _, k := range strings.Split(v, ",") {
-		if l := strings.Split(k, "="); len(l) == 2 {
-			switch l[0] {
-			case "METHOD":
-				key.method = l[1]
-			case "URI":
-				uri := l[1]
-				uri = strings.ReplaceAll(uri, "\"", "")
-				if !strings.HasPrefix(uri, "http") {
-					uri = host + uri
-				}
-				key.key, err = tool.GetBytes(uri)
+func NewResponse(uri string) (*Response, error) {
+	bs, err := http.GetBytes(uri)
+	if err != nil {
+		return nil, err
+	}
+	//解析数据
+	return Decode(uri, bs)
+}
+
+func Decode(uri string, bs []byte) (resp *Response, err error) {
+	host, err := url.Parse(str.CropLast(uri, "/"))
+	if err != nil {
+		return nil, err
+	}
+	base, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	resp = &Response{host: host, filename: filepath.Base(base.Path)}
+	nextItem := false
+	for _, s := range strings.Split(string(bs), "\n") {
+		switch true {
+		case nextItem:
+			if !strings.HasPrefix(s, "http") {
+				//相对路径
+				suffixURL, err := url.Parse(s)
 				if err != nil {
-					return key, err
+					return nil, err
 				}
-			case "IV":
-				if len(l[1]) > 2 && strings.ToLower(l[1][:2]) == "0x" {
-					key.iv, err = hex.DecodeString(l[1][2:])
-					if err != nil {
-						return key, err
+				s = resp.host.ResolveReference(suffixURL).String()
+			}
+			resp.TS_URL = append(resp.TS_URL, s)
+			nextItem = false
+		case strings.HasPrefix(s, "#EXT-X-KEY:"):
+			s = strings.TrimPrefix(s, "#EXT-X-KEY:")
+			//按,分割
+			for _, v := range strings.Split(s, ",") {
+				if list := strings.SplitN(v, "=", 2); len(list) == 2 {
+					switch list[0] {
+					case "METHOD":
+						//加密方式
+						resp.Method = list[1]
+					case "URI":
+						//秘钥地址
+						if !strings.HasPrefix(s, "http") {
+							suffixURL, err := url.Parse(strings.Trim(list[1], `"`))
+							if err != nil {
+								return nil, err
+							}
+							s = resp.host.ResolveReference(suffixURL).String()
+						}
+						resp.Key, err = http.GetBytes(s)
+						if err != nil {
+							return nil, err
+						}
+					case "IV":
+						//秘钥
+						if len(list[1]) > 2 && strings.ToLower(list[1][:2]) == "0x" {
+							resp.IV, err = hex.DecodeString(list[1][2:])
+							if err != nil {
+								return nil, err
+							}
+						} else {
+							//todo
+						}
 					}
 				}
 			}
-		}
-	}
-	if len(key.iv) == 0 {
-		key.iv = key.key
-	}
-	return
-}
-
-type Key struct {
-	key    []byte
-	method string
-	iv     []byte
-}
-
-func (this *Key) decode(data []byte) (bytes []byte, err error) {
-	defer tool.Recover(&err)
-	if this == nil || len(this.key) == 0 {
-		return data, nil
-	}
-	return tool.DecryptCBC(data, this.key, this.iv)
-}
-
-type Buff struct {
-	start, end int
-	*bytes.Buffer
-}
-
-type Info struct {
-	Url   string
-	bytes []byte
-	err   error
-
-	Key *Key
-	idx int
-}
-
-func (this *Info) Idx() int {
-	return this.idx
-}
-
-func (this *Info) Err() error {
-	return this.err
-}
-
-func (this *Info) Bytes() []byte {
-	return this.bytes
-}
-
-func (this *Info) Get() error {
-	//start := time.Now()
-	//defer func() {
-	//	log.Println("耗时:", time.Now().Sub(start), this.Url)
-	//}()
-	this.bytes, this.err = tool.GetBytes(this.Url)
-	return this.err
-}
-
-func (this *Info) Run() ([]byte, error) {
-	err := this.GetAndDecode()
-	return this.Bytes(), err
-}
-
-func (this *Info) GetAndDecode() error {
-	if err := this.Get(); err != nil {
-		return err
-	}
-	this.bytes, this.err = this.Key.decode(this.bytes)
-	return this.err
-}
-
-func (this *Info) Decode() (list []*Info, err error) {
-	if err := this.Get(); err != nil {
-		return nil, err
-	}
-	idx := 0
-	for _, v := range strings.Split(string(this.bytes), "\n") {
-		if strings.Contains(v, "#EXT-X-KEY:") {
-			this.Key, err = newKey(this.prefix(), v)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if strings.HasPrefix(v, "http") {
-			list = append(list, &Info{idx: idx, Url: v, Key: this.Key})
-			idx++
-		} else if strings.Contains(v, ".ts") || strings.Contains(v, ".png") || strings.Contains(v, ".mp4") {
-			list = append(list, &Info{idx: idx, Url: this.prefix() + v, Key: this.Key})
-			idx++
-		} else if strings.Contains(v, ".m3u8") {
-			if strings.Index(v, "/") > 1 {
-				i := &Info{Url: this.prefix() + v}
-				return i.Decode()
-			} else {
-				i := &Info{Url: this.host() + v}
-				return i.Decode()
-			}
+		case strings.HasPrefix(s, "#EXTINF:"):
+			//下一行是下载地址
+			nextItem = true
+		case strings.HasPrefix(s, "#EXT-X-ENDLIST"):
+			//列表结束
+			break
 		}
 	}
 	return
 }
 
-func (this *Info) Filename(name ...string) string {
-	url := tool.CropLast(this.Url, "?", false)
-	fileName := filepath.Base(url)
-	fileName = strings.ReplaceAll(fileName, filepath.Ext(fileName), ".ts")
-	if len(name) > 0 {
-		fileName = name[0]
-	}
-	return fileName
+type Response struct {
+	filename string   //文件名称
+	host     *url.URL //主机,前缀
+	TS_URL   []string //下载地址
+	decrypt           //解密方式
 }
 
-func (this *Info) Filepath(name ...string) string {
-	fileName := filepath.Base(this.Url)
-	fileName = "./" + strings.ReplaceAll(fileName, filepath.Ext(fileName), ".ts")
-	if len(name) > 0 {
-		fileName = name[0]
-	}
-	return fileName
+func (this *Response) Filename() string {
+	return str.CropLast(this.filename, ".") + "ts"
 }
 
-func (this *Info) prefix() string {
-	return tool.CropLast(this.Url, "/")
+type decrypt struct {
+	Method string
+	Key    []byte
+	IV     []byte
 }
 
-func (this *Info) host() string {
-	u, _ := url.Parse(this.Url)
-	return u.Scheme + "://" + u.Host
+func (this *decrypt) Decrypt(bs []byte) ([]byte, error) {
+	switch this.Method {
+	case "AES-128":
+		return aes.DecryptCBC(bs, this.Key, this.IV)
+	}
+	return bs, nil
 }
 
-func (this *Info) merge() (io.Reader, error) {
+/*
 
-	list, err := this.Decode()
-	if err != nil {
-		return nil, err
+
+
+
+ */
+
+func (this *Response) List() (list []download.Item) {
+	for i, v := range this.TS_URL {
+		list = append(list, &item{
+			decrypt: this.decrypt,
+			idx:     i,
+			url:     v,
+		})
 	}
-	result := make([]*Info, len(list))
-
-	wg := sync.WaitGroup{}
-	limit := make(chan byte, 20)
-	for i, v := range list {
-		wg.Add(1)
-		limit <- 0
-		go func(i int, v *Info) {
-			defer func() {
-				wg.Done()
-				<-limit
-			}()
-			for x := 0; x < 3; x++ {
-				if err := v.GetAndDecode(); err != nil {
-					log.Println("错误:", err)
-				} else {
-					result[i] = v
-					break
-				}
-			}
-		}(i, v)
-	}
-
-	wg.Wait()
-	buf := bytes.NewBuffer(nil)
-	for _, v := range result {
-		if v != nil {
-			buf.Write(v.Bytes())
-		}
-	}
-
-	return buf, nil
-}
-
-func (this *Info) Download(name ...string) error {
-	fileName := this.Filepath(name...)
-	buf, err := this.merge()
-	if err != nil {
-		return err
-	}
-	return tool.NewFile(fileName, buf)
+	return
 }
 
 func NewTask(url string) (download.Task, error) {
-	x := Info{Url: url}
-	list, err := x.Decode()
+	resp, err := NewResponse(url)
 	if err != nil {
 		return nil, err
 	}
-	result := download.NewList(x.Filename())
-	for _, v := range list {
+	result := download.NewList(filepath.Join(resp.Filename()))
+	for _, v := range resp.List() {
 		result.Append(v)
 	}
 	return result, nil
+}
+
+type item struct {
+	decrypt
+	idx int
+	url string
+}
+
+func (this *item) Idx() int {
+	return this.idx
+}
+
+func (this *item) Run() ([]byte, error) {
+	bs, err := http.GetBytes(this.url)
+	if err != nil {
+		return nil, err
+	}
+	return this.Decrypt(bs)
 }

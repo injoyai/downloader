@@ -2,9 +2,9 @@ package download
 
 import (
 	"context"
-	"github.com/injoyai/downloader/tool"
+	"github.com/injoyai/base/chans"
+	"github.com/injoyai/logs"
 	"io"
-	"sync"
 	"time"
 )
 
@@ -17,7 +17,6 @@ func NewWithContext(ctx context.Context, op *Option) *Downloader {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Downloader{
 		limit:  op.Limit,
-		bar:    tool.NewBar().SetColor(op.BarColor).SetStyle(op.BarStyle),
 		ctx:    ctx,
 		cancel: cancel,
 		retry:  op.Retry,
@@ -27,7 +26,6 @@ func NewWithContext(ctx context.Context, op *Option) *Downloader {
 type Downloader struct {
 	queue  chan Item          //普通队列
 	limit  uint               //协程数
-	bar    *tool.Bar          //进度条
 	ctx    context.Context    //ctx
 	cancel context.CancelFunc //cancel
 	retry  uint               //重试次数
@@ -38,10 +36,6 @@ func (this *Downloader) addErr(err error) {
 	if err != nil {
 		this.err = append(this.err, err)
 	}
-}
-
-func (this *Downloader) Bar() *tool.Bar {
-	return this.bar
 }
 
 func (this *Downloader) Retry() int {
@@ -61,35 +55,32 @@ func (this *Downloader) runTask(t Item) (bytes []byte, err error) {
 	return
 }
 
-func (this *Downloader) Run(list Task, writer io.Writer) []error {
-	this.bar.SetSize(float64(list.Len()))
+func (this *Downloader) Run(list Task, writer io.Writer, f ...func()) []error {
 	this.queue = make(chan Item, list.Len())
 	cache := make([][]byte, list.Len()) //+1)
 	for _, v := range list.List() {
 		this.queue <- v
 	}
 	//idx := 0
-	wg := sync.WaitGroup{}
-	ch := make(chan byte, this.limit)
+	wg := chans.NewWaitLimit(this.limit)
 	fn := func(ctx context.Context, c chan Item) {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case i := <-c:
-				wg.Add(1)
-				ch <- 0
+				wg.Add()
 				if cache[i.Idx()] == nil {
 					go func(t Item) {
-						defer func() {
-							this.bar.Add(1)
-							<-ch
-							wg.Done()
-						}()
+						defer wg.Done()
 						bytes, err := this.runTask(t)
 						this.addErr(err)
+						logs.PrintErr(err)
 						if err == nil {
 							cache[i.Idx()] = bytes
+						}
+						for _, v := range f {
+							v()
 						}
 					}(i)
 				}
@@ -97,7 +88,6 @@ func (this *Downloader) Run(list Task, writer io.Writer) []error {
 		}
 	}
 	go fn(this.ctx, this.queue)
-	go this.bar.Wait()
 	time.Sleep(time.Second)
 	wg.Wait()
 	for _, bs := range cache {
