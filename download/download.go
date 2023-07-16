@@ -3,7 +3,6 @@ package download
 import (
 	"context"
 	"github.com/injoyai/base/chans"
-	"github.com/injoyai/logs"
 	"io"
 	"time"
 )
@@ -30,12 +29,6 @@ type Downloader struct {
 	cancel context.CancelFunc //cancel
 	retry  uint               //重试次数
 	err    []error            //错误
-}
-
-func (this *Downloader) addErr(err error) {
-	if err != nil {
-		this.err = append(this.err, err)
-	}
 }
 
 func (this *Downloader) Retry() int {
@@ -74,10 +67,10 @@ func (this *Downloader) Run(list Task, writer io.Writer, f ...func()) []error {
 					go func(t Item) {
 						defer wg.Done()
 						bytes, err := this.runTask(t)
-						this.addErr(err)
-						logs.PrintErr(err)
 						if err == nil {
 							cache[i.Idx()] = bytes
+						} else {
+							this.err = append(this.err, err)
 						}
 						for _, v := range f {
 							v()
@@ -97,10 +90,8 @@ func (this *Downloader) Run(list Task, writer io.Writer, f ...func()) []error {
 }
 
 type Option struct {
-	Limit    uint
-	Retry    uint
-	BarColor int
-	BarStyle string
+	Limit uint
+	Retry uint
 }
 
 func (this *Option) new() *Option {
@@ -108,19 +99,14 @@ func (this *Option) new() *Option {
 		this = new(Option)
 	}
 	op := &Option{
-		Limit:    this.Limit,
-		Retry:    this.Limit,
-		BarColor: this.BarColor,
-		BarStyle: this.BarStyle,
+		Limit: this.Limit,
+		Retry: this.Limit,
 	}
 	if op.Limit <= 0 {
 		op.Limit = 20
 	}
 	if op.Retry <= 0 {
 		op.Retry = 20
-	}
-	if len(op.BarStyle) == 0 {
-		op.BarStyle = ">"
 	}
 	return op
 }

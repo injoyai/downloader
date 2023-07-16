@@ -39,6 +39,7 @@ func New() error {
 		Html:   "./index.html",
 	}, func(app lorca.APP) error {
 
+		app.SetValueByID("download_addr", cfg.GetString("download_addr"))
 		app.SetValueByID("download_dir", cfg.GetString("download_dir", "./"))
 		app.Eval(fmt.Sprintf("document.getElementById('proxy_addr').checked=%v", cfg.GetBool("proxy_addr")))
 		app.SetValueByID("proxy_addr", cfg.GetString("proxy_addr", "localhost:1081"))
@@ -46,6 +47,7 @@ func New() error {
 
 		enable := chans.NewRerun(func(ctx context.Context) {
 
+			app.SetValueByID("download", "停止下载")
 			app.SetValueByID("log", "")
 
 			downloadAddr := strings.TrimSpace(conv.String(app.GetValueByID("download_addr")))
@@ -63,20 +65,23 @@ func New() error {
 				}
 
 				defer func() {
+					app.SetValueByID("download", "开始下载")
 					if err != nil {
 						app.SetValueByID("log", err.Error())
 					}
 				}()
 				defer g.Recover(&err, true)
 
-				if downloadDir != cfg.GetString("download_dir") ||
+				if downloadAddr != cfg.GetString("download_addr") ||
+					downloadDir != cfg.GetString("download_dir") ||
 					proxyUse != cfg.GetBool("proxy_use") ||
 					proxyAddr != cfg.GetString("proxy_addr") ||
 					doneVoice != cfg.GetBool("done_voice") {
 					if len(downloadDir) == 0 {
 						downloadDir = "./"
 					}
-					cfg.Set("download_dir", downloadAddr)
+					cfg.Set("download_addr", downloadAddr)
+					cfg.Set("download_dir", downloadDir)
 					cfg.Set("proxy_use", proxyUse)
 					cfg.Set("proxy_addr", proxyAddr)
 					cfg.Set("done_voice", doneVoice)
@@ -137,7 +142,7 @@ func New() error {
 						total := float64(l.Len())
 						current := uint32(0)
 
-						errs := download.New(&download.Option{Limit: 20}).Run(l, f, func() {
+						errs := download.NewWithContext(ctx, &download.Option{Limit: 20}).Run(l, f, func() {
 							value := atomic.AddUint32(&current, 1)
 							rate := (float64(value) / total) * 100
 							app.SetValueByID("bar", int(rate))
@@ -158,7 +163,6 @@ func New() error {
 		return app.Bind("run", func() {
 			running := app.GetValueByID("download") == "开始下载"
 			app.SetValueByID("download", conv.SelectString(running, "停止下载", "开始下载"))
-			defer app.SetValueByID("download", "开始下载")
 			enable.Enable(running)
 		})
 
