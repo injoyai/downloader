@@ -9,9 +9,10 @@ import (
 	"github.com/injoyai/downloader/download"
 	"github.com/injoyai/downloader/download/m3u8"
 	"github.com/injoyai/downloader/spider"
-	"github.com/injoyai/downloader/tool"
+	"github.com/injoyai/goutil/cache"
 	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/notice/voice"
 	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/logs"
@@ -27,37 +28,61 @@ import (
 	"time"
 )
 
+var cfg = func() *cache.File {
+	filename := oss.UserLocalDir(oss.DefaultName, "/download/config.json")
+	return cache.NewFile(filename)
+}()
+
 func New() error {
 	return lorca.Run(&lorca.Config{
 		Width:  600,
-		Height: 390,
-		Html:   "./gui/index.html",
+		Height: 395,
+		Html:   "./index.html",
 	}, func(app lorca.APP) error {
 
-		app.SetValueByID("done_voice", conv.String(tool.Cfg.Prompt))
-		app.SetValueByID("download_dir", conv.String(tool.Cfg.DownloadDir))
+		app.SetValueByID("download_dir", cfg.GetString("download_dir", "./"))
+		app.Eval(fmt.Sprintf("document.getElementById('proxy_addr').checked=%v", cfg.GetBool("proxy_addr")))
+		app.SetValueByID("proxy_addr", cfg.GetString("proxy_addr", "localhost:1081"))
+		app.Eval(fmt.Sprintf("document.getElementById('done_voice').checked=%v", cfg.GetBool("done_voice")))
 
 		enable := chans.NewRerun(func(ctx context.Context) {
 			downloadAddr := strings.TrimSpace(conv.String(app.GetValueByID("download_addr")))
 			downloadDir := conv.String(app.GetValueByID("download_dir"))
 			downloadName := conv.String(app.GetValueByID("download_name"))
+			proxyUse := app.Eval("document.getElementById('proxy_use').checked").Bool()
 			proxyAddr := conv.String(app.GetValueByID("proxy_addr"))
-			doneVoice := conv.Bool(app.GetValueByID("done_voice"))
+			doneVoice := app.Eval("document.getElementById('done_voice').checked").Bool()
 
 			logs.PrintErr(func() (err error) {
-				if len(proxyAddr) > 0 {
+				if proxyUse {
 					http.DefaultClient.SetProxy(proxyAddr)
+				} else {
+					http.DefaultClient = http.NewClient()
 				}
+
+				defer func() {
+					if err != nil {
+						app.SetValueByID("log", err.Error())
+					}
+				}()
 				defer g.Recover(&err, true)
 
-				if downloadDir != tool.Cfg.Dir() || doneVoice != tool.Cfg.Prompt {
-					tool.Cfg.DownloadDir = downloadDir
-					tool.Cfg.Prompt = doneVoice
-					tool.Cfg.Save()
+				if downloadDir != cfg.GetString("download_dir") ||
+					proxyUse != cfg.GetBool("proxy_use") ||
+					proxyAddr != cfg.GetString("proxy_addr") ||
+					doneVoice != cfg.GetBool("done_voice") {
+					if len(downloadDir) == 0 {
+						downloadDir = "./"
+					}
+					cfg.Set("download_dir", downloadAddr)
+					cfg.Set("proxy_use", proxyUse)
+					cfg.Set("proxy_addr", proxyAddr)
+					cfg.Set("done_voice", doneVoice)
+					cfg.Cover()
 				}
 
 				// 不存在则生成保存的文件夹
-				g.PanicErr(os.MkdirAll(tool.Cfg.Dir(), 0777))
+				oss.New(downloadDir, 0777)
 
 				if len(downloadAddr) == 0 {
 					return errors.New("无效下载地址")
@@ -65,40 +90,34 @@ func New() error {
 
 				app.SetValueByID("log", downloadAddr)
 				urls, err := findUrl(downloadAddr)
-				g.PanicErr(err)
+				if err != nil {
+					return err
+				}
 				if len(urls) == 0 {
-					app.SetValueByID("log", "没有找到资源")
-					return
+					return errors.New("没有找到资源")
 				}
 
 				defer func() {
-					if tool.Cfg.Prompt {
-						v, _ := voice.NewLocal(nil)
-						v.Call(&voice.Message{
-							TemplateID: "",
-							Phone:      "",
-							Param:      "叮咚. 你的视频已下载完成",
-						})
+					if doneVoice {
+						voice.Speak("叮咚. 你的视频已下载完成")
 					}
 				}()
 
-				list := make([]string, len(urls))
 				for i, url := range urls {
 					func(i int, url, filename string) (err error) {
+						start := time.Now()
+						result := url
+						app.SetValueByID("log", result)
 						defer func() {
 							if err != nil {
 								app.SetValueByID("log", err.Error())
 							} else {
-								app.SetValueByID("log", strings.Join(list, "\n"))
+								app.SetValueByID("log", result)
 							}
 						}()
-						start := time.Now()
-						list[i] = url
-						app.SetValueByID("log", strings.Join(list, "\n"))
+
 						l, err := m3u8.NewTask(url)
 						if err != nil {
-							list[i] = err.Error()
-							app.SetValueByID("log", err.Error())
 							return err
 						}
 						if len(filename) == 0 {
@@ -109,28 +128,24 @@ func New() error {
 
 						f, err := os.Create(downloadDir + filename)
 						if err != nil {
-							list[i] = err.Error()
-							app.SetValueByID("log", err.Error())
 							return err
 						}
+						defer f.Close()
 
 						total := float64(l.Len())
 						current := uint32(0)
 
-						errs := download.New(&download.Option{
-							Limit: 20,
-						}).Run(l, f, func() {
+						errs := download.New(&download.Option{Limit: 20}).Run(l, f, func() {
 							value := atomic.AddUint32(&current, 1)
 							rate := (float64(value) / total) * 100
 							app.SetValueByID("bar", int(rate))
 							app.SetValueByID("log", fmt.Sprintf("%0.1f%%", rate))
 						})
-						f.Close()
+
 						if len(errs) > 0 {
-							list[i] = errs[0].Error()
-						} else {
-							list[i] = "下载完成,用时" + time.Now().Sub(start).String()
+							return errs[0]
 						}
+						result = "下载完成,用时" + time.Now().Sub(start).String()
 						return nil
 					}(i, url, downloadName)
 				}
