@@ -15,7 +15,6 @@ import (
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/notice/voice"
 	"github.com/injoyai/goutil/str"
-	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"github.com/tebeka/selenium"
 	"net/url"
@@ -36,16 +35,19 @@ var cfg = func() *cache.File {
 func New() error {
 	return lorca.Run(&lorca.Config{
 		Width:  600,
-		Height: 395,
+		Height: 442,
 		Html:   "./index.html",
 	}, func(app lorca.APP) error {
 
 		app.SetValueByID("download_dir", cfg.GetString("download_dir", "./"))
 		app.Eval(fmt.Sprintf("document.getElementById('proxy_addr').checked=%v", cfg.GetBool("proxy_addr")))
 		app.SetValueByID("proxy_addr", cfg.GetString("proxy_addr", "localhost:1081"))
-		app.Eval(fmt.Sprintf("document.getElementById('done_voice').checked=%v", cfg.GetBool("done_voice")))
+		app.Eval(fmt.Sprintf("document.getElementById('done_voice').checked=%v", cfg.GetBool("done_voice", true)))
 
 		enable := chans.NewRerun(func(ctx context.Context) {
+
+			app.SetValueByID("log", "")
+
 			downloadAddr := strings.TrimSpace(conv.String(app.GetValueByID("download_addr")))
 			downloadDir := conv.String(app.GetValueByID("download_dir"))
 			downloadName := conv.String(app.GetValueByID("download_name"))
@@ -53,7 +55,7 @@ func New() error {
 			proxyAddr := conv.String(app.GetValueByID("proxy_addr"))
 			doneVoice := app.Eval("document.getElementById('done_voice').checked").Bool()
 
-			logs.PrintErr(func() (err error) {
+			func() (err error) {
 				if proxyUse {
 					http.DefaultClient.SetProxy(proxyAddr)
 				} else {
@@ -150,7 +152,7 @@ func New() error {
 					}(i, url, downloadName)
 				}
 				return nil
-			}())
+			}()
 		})
 
 		return app.Bind("run", func() {

@@ -1,2 +1,5 @@
 .idea
 /output/
+/chromedriver.exe
+/downloader.exe
+/bin/
