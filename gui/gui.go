@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"github.com/injoyai/base/chans"
@@ -32,11 +33,14 @@ var cfg = func() *cache.File {
 	return cache.NewFile(filename)
 }()
 
+//go:embed index.html
+var html string
+
 func New() error {
 	return lorca.Run(&lorca.Config{
 		Width:  600,
 		Height: 442,
-		Html:   "./index.html",
+		Html:   html,
 	}, func(app lorca.APP) error {
 
 		app.SetValueByID("download_addr", cfg.GetString("download_addr"))
