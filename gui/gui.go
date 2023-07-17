@@ -208,6 +208,13 @@ func findUrl(u string) ([]string, error) {
 			g.PanicErr(p.SwitchFrame(nil))
 		}
 
+		switch {
+		case strings.Contains(u, "bedroom.uhnmon.com"):
+			for idx, v := range urls {
+				urls[idx] = strings.ReplaceAll(v, `\/`, "/") + "&v=3&time=0"
+			}
+		}
+
 	}); err != nil {
 		return nil, err
 	}
