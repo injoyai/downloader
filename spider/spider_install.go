@@ -3,9 +3,9 @@ package spider
 import (
 	"errors"
 	"fmt"
-	"github.com/injoyai/downloader/tool"
 	"github.com/injoyai/goutil/net/http"
 	"github.com/injoyai/goutil/oss"
+	"github.com/injoyai/goutil/oss/compress/zip"
 	"github.com/injoyai/goutil/oss/win"
 	"github.com/injoyai/goutil/str"
 	"io/ioutil"
@@ -48,7 +48,7 @@ func Install() error {
 		if err := oss.New(zipPath, bs); err != nil {
 			return err
 		}
-		if err := tool.DecodeZip(zipPath, "./"); err != nil {
+		if err := zip.Decode(zipPath, "./"); err != nil {
 			return err
 		}
 		if err := os.Remove(zipPath); err != nil {
