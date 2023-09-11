@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"github.com/injoyai/base/bytes/crypt/aes"
 	"github.com/injoyai/downloader/download"
+	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/goutil/net/http"
 	"github.com/injoyai/goutil/str"
 	"net/url"
@@ -13,7 +14,7 @@ import (
 )
 
 func RegexpAll(s string) []string {
-	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:]+\.m3u8([\?a-zA-Z0-9/=_\-.]{0,})`).FindAllString(s, -1)
+	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:%&]+\.m3u8([\?a-zA-Z0-9/=_\-.]{0,})`).FindAllString(s, -1)
 }
 
 func NewResponse(uri string) (*Response, error) {
@@ -112,7 +113,8 @@ type decrypt struct {
 	IV     []byte
 }
 
-func (this *decrypt) Decrypt(bs []byte) ([]byte, error) {
+func (this *decrypt) Decrypt(bs []byte) (_ []byte, err error) {
+	defer g.Recover(&err)
 	switch this.Method {
 	case "AES-128":
 		return aes.DecryptCBC(bs, this.Key, this.IV)
