@@ -209,7 +209,7 @@ func findUrl(u string) ([]string, error) {
 		}
 
 		switch {
-		case strings.Contains(u, "bedroom.uhnmon.com"):
+		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg"):
 			for idx, v := range urls {
 				urls[idx] = strings.ReplaceAll(v, `\/`, "/") + "&v=3&time=0"
 			}
