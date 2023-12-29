@@ -2,7 +2,6 @@ package gui
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"github.com/injoyai/base/chans"
@@ -16,6 +15,7 @@ import (
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/notice/voice"
 	"github.com/injoyai/goutil/str"
+	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"github.com/tebeka/selenium"
 	"net/url"
@@ -28,152 +28,96 @@ import (
 	"time"
 )
 
-var cfg = func() *cache.File {
-	filename := oss.UserLocalDir(oss.DefaultName, "/download/config.json")
-	return cache.NewFile(filename)
-}()
-
-//go:embed index.html
-var html string
-
-func New() error {
-	return lorca.Run(&lorca.Config{
-		Width:  600,
-		Height: 442,
-		Html:   html,
-	}, func(app lorca.APP) error {
-
-		app.SetValueByID("download_addr", cfg.GetString("download_addr"))
-		app.SetValueByID("download_dir", cfg.GetString("download_dir", "./"))
-		app.Eval(fmt.Sprintf("document.getElementById('proxy_addr').checked=%v", cfg.GetBool("proxy_addr")))
-		app.SetValueByID("proxy_addr", cfg.GetString("proxy_addr", "localhost:1081"))
-		app.Eval(fmt.Sprintf("document.getElementById('done_voice').checked=%v", cfg.GetBool("done_voice", true)))
-
-		enable := chans.NewRerun(func(ctx context.Context) {
-
-			app.SetValueByID("download", "停止下载")
-			app.SetValueByID("log", "")
-
-			downloadAddr := strings.TrimSpace(conv.String(app.GetValueByID("download_addr")))
-			downloadDir := conv.String(app.GetValueByID("download_dir"))
-			downloadName := conv.String(app.GetValueByID("download_name"))
-			proxyUse := app.Eval("document.getElementById('proxy_use').checked").Bool()
-			proxyAddr := conv.String(app.GetValueByID("proxy_addr"))
-			doneVoice := app.Eval("document.getElementById('done_voice').checked").Bool()
-
-			func() (err error) {
-				if proxyUse {
-					http.DefaultClient.SetProxy(proxyAddr)
-				} else {
-					http.DefaultClient = http.NewClient()
-				}
-
-				defer func() {
-					app.SetValueByID("download", "开始下载")
-					if err != nil {
-						app.SetValueByID("log", err.Error())
-					}
-				}()
-				defer g.Recover(&err, true)
-
-				if downloadAddr != cfg.GetString("download_addr") ||
-					downloadDir != cfg.GetString("download_dir") ||
-					proxyUse != cfg.GetBool("proxy_use") ||
-					proxyAddr != cfg.GetString("proxy_addr") ||
-					doneVoice != cfg.GetBool("done_voice") {
-					if len(downloadDir) == 0 {
-						downloadDir = "./"
-					}
-					cfg.Set("download_addr", downloadAddr)
-					cfg.Set("download_dir", downloadDir)
-					cfg.Set("proxy_use", proxyUse)
-					cfg.Set("proxy_addr", proxyAddr)
-					cfg.Set("done_voice", doneVoice)
-					cfg.Cover()
-				}
-
-				// 不存在则生成保存的文件夹
-				oss.New(downloadDir, 0777)
-
-				if len(downloadAddr) == 0 {
-					return errors.New("无效下载地址")
-				}
-
-				app.SetValueByID("log", downloadAddr)
-				urls, err := findUrl(downloadAddr)
-				if err != nil {
-					return err
-				}
-				if len(urls) == 0 {
-					return errors.New("没有找到资源")
-				}
-
-				defer func() {
-					if doneVoice {
-						voice.Speak("叮咚. 你的视频已下载完成")
-					}
-				}()
-
-				for i, url := range urls {
-					func(i int, url, filename string) (err error) {
-						start := time.Now()
-						result := url
-						app.SetValueByID("log", result)
-						defer func() {
-							if err != nil {
-								app.SetValueByID("log", err.Error())
-							} else {
-								app.SetValueByID("log", result)
-							}
-						}()
-
-						l, err := m3u8.NewTask(url)
-						if err != nil {
-							return err
-						}
-						if len(filename) == 0 {
-							filename = l.Filename()
-						} else if !strings.Contains(filename, ".") {
-							filename += "_" + strconv.Itoa(i) + filepath.Ext(l.Filename())
-						}
-
-						f, err := os.Create(downloadDir + filename)
-						if err != nil {
-							return err
-						}
-						defer f.Close()
-
-						total := float64(l.Len())
-						current := uint32(0)
-
-						errs := download.NewWithContext(ctx, &download.Option{Limit: 20}).Run(l, f, func() {
-							value := atomic.AddUint32(&current, 1)
-							rate := (float64(value) / total) * 100
-							app.SetValueByID("bar", int(rate))
-							app.SetValueByID("log", fmt.Sprintf("%0.1f%%", rate))
-						})
-
-						if len(errs) > 0 {
-							return errs[0]
-						}
-						result = "下载完成,用时" + time.Now().Sub(start).String()
-						return nil
-					}(i, url, downloadName)
-				}
-				return nil
-			}()
-		})
-
-		return app.Bind("run", func() {
-			running := app.GetValueByID("download") == "开始下载"
-			app.SetValueByID("download", conv.SelectString(running, "停止下载", "开始下载"))
-			enable.Enable(running)
-		})
-
-	})
+type Interface interface {
+	Set(key string, value string) error //设置属性
+	Get(key string) (string, error)     //获取属性
+	SetLog(value string)                //设置日志
+	SetDownload(enable bool)            //设置下载开始/结束
 }
 
-func findUrl(u string) ([]string, error) {
+type gui struct {
+	lorca.APP
+	*cache.File
+}
+
+func (this *gui) Set(key string, value interface{}) {
+	this.APP.SetValueByID(key, value)
+}
+
+func (this *gui) Get(key string) string {
+	return this.APP.GetValueByID(key)
+}
+
+func (this *gui) SetLog(value string) {
+	this.Set("log", value)
+}
+
+func (this *gui) SetBar(rate float64) {
+	this.Set("bar", rate)
+}
+
+func (this *gui) SetDownload(enable bool) {
+	if enable {
+		this.Set("download", "停止下载")
+	} else {
+		this.Set("download", "下载")
+	}
+}
+
+func (this *gui) SetConfig() {
+	this.APP.SetValueByID("download_addr", this.GetString("download_addr"))
+	this.APP.SetValueByID("download_dir", this.GetString("download_dir", "./"))
+	this.APP.Eval(fmt.Sprintf("document.getElementById('proxy_addr').checked=%v", this.GetBool("proxy_addr")))
+	this.APP.SetValueByID("proxy_addr", this.GetString("proxy_addr", "localhost:1081"))
+	this.APP.Eval(fmt.Sprintf("document.getElementById('done_voice').checked=%v", this.GetBool("done_voice", true)))
+
+}
+
+// DecodeConfig 获取配置
+func (this *gui) DecodeConfig(app lorca.APP) (*Config, error) {
+	c := &Config{
+		DownloadAddr: strings.TrimSpace(conv.String(app.GetValueByID("download_addr"))),
+		DownloadDir:  conv.String(app.GetValueByID("download_dir")),
+		DownloadName: conv.String(app.GetValueByID("download_name")),
+		EnableProxy:  app.Eval("document.getElementById('proxy_use').checked").Bool(),
+		ProxyAddr:    conv.String(app.GetValueByID("proxy_addr")),
+		DoneVoice:    app.Eval("document.getElementById('done_voice').checked").Bool(),
+	}
+	if len(c.DownloadDir) == 0 {
+		c.DownloadDir = "./"
+	}
+	oss.New(c.DownloadDir, 0777)
+	if err := this.SaveConfig(c); err != nil {
+		return nil, err
+	}
+	if len(c.DownloadAddr) == 0 {
+		return nil, errors.New("无效下载地址")
+	}
+	this.SetLog(c.DownloadAddr)
+	return c, nil
+}
+
+func (this *gui) SaveConfig(cfg *Config) error {
+	this.File.Set("download_addr", cfg.DownloadAddr)
+	this.File.Set("download_dir", cfg.DownloadDir)
+	this.File.Set("proxy_addr", cfg.ProxyAddr)
+	this.File.Set("done_voice", cfg.DoneVoice)
+	return this.File.Cover()
+}
+
+type Config struct {
+	DownloadAddr string //资源地址
+	DownloadDir  string //下载目录
+	DownloadName string //下载名称
+	EnableProxy  bool   //启用代理
+	ProxyAddr    string //代理地址
+	DoneVoice    bool   //下载完成声音
+}
+
+// findUrl 通过资源地址获取到下载连接
+func (this *Config) findUrl() ([]string, error) {
+
+	u := this.DownloadAddr
 
 	urls := []string(nil)
 	if strings.Contains(u, ".m3u8") {
@@ -183,6 +127,7 @@ func findUrl(u string) ([]string, error) {
 	if !strings.Contains(u, "http") {
 		return nil, errors.New("invalid url")
 	}
+	logs.Debug("开始爬取...")
 	if err := spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
@@ -216,6 +161,7 @@ func findUrl(u string) ([]string, error) {
 		}
 
 	}); err != nil {
+		logs.Err(err)
 		return nil, err
 	}
 
@@ -251,5 +197,98 @@ func findUrl(u string) ([]string, error) {
 		}
 	}
 
+	if len(urls) == 0 {
+		return nil, errors.New("没有找到资源")
+	}
+
 	return urls, nil
+}
+
+func (this *Config) CreateFile(idx int, urlFilename string) (*os.File, error) {
+	filename := conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName+"_"+strconv.Itoa(idx)+filepath.Ext(urlFilename))
+	logs.Debug("文件名称: ", filename)
+	return os.Create(this.DownloadDir + filename)
+}
+
+func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (err error) {
+
+	logs.Debug("资源地址: ", url)
+
+	l, err := m3u8.NewTask(url)
+	if err != nil {
+		return err
+	}
+
+	f, err := this.CreateFile(idx, l.Filename())
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	current := uint32(0)
+	errs := download.NewWithContext(ctx, &download.Option{Limit: 20}).Run(l, f, func() {
+		value := atomic.AddUint32(&current, 1)
+		rate := (float64(value) / float64(l.Len())) * 100
+		gui.SetBar(rate)
+		gui.SetLog(fmt.Sprintf("%0.1f%%", rate))
+	})
+
+	return append(errs, nil)[0]
+}
+
+func New() error {
+	return lorca.Run(&lorca.Config{
+		Width:  600,
+		Height: 442,
+		Html:   html,
+	}, func(app lorca.APP) error {
+
+		gui := &gui{
+			APP:  app,
+			File: cache.NewFile(oss.UserLocalDir(oss.DefaultName, "/download/config.json")),
+		}
+
+		//设置配置信息到gui
+		gui.SetConfig()
+
+		enable := chans.NewRerun(func(ctx context.Context) {
+
+			gui.Set("download", "停止下载")
+			defer gui.Set("download", "开始下载")
+			gui.SetLog("")
+
+			//获取配置信息,并保存
+			config, err := gui.DecodeConfig(app)
+			if err != nil {
+				gui.SetLog(err.Error())
+				return
+			}
+
+			urls, err := config.findUrl()
+			if err != nil {
+				gui.SetLog(err.Error())
+				return
+			}
+
+			for i, url := range urls {
+				gui.SetLog(url)
+				start := time.Now()
+				err := config.Download(ctx, gui, i, url)
+				gui.SetLog(conv.SelectString(err == nil, "下载成功,用时"+time.Now().Sub(start).String(), "下载失败: "+conv.String(err)))
+				logs.Debug("下载完成,结果: ", conv.New(err).String("成功"))
+			}
+
+			if config.DoneVoice {
+				voice.Speak("叮咚. 你的视频已下载完成")
+			}
+
+		})
+
+		return app.Bind("run", func() {
+			running := app.GetValueByID("download") == "开始下载"
+			app.SetValueByID("download", conv.SelectString(running, "停止下载", "开始下载"))
+			enable.Enable(running)
+		})
+
+	})
 }

@@ -62,7 +62,7 @@ func Install() error {
 func getVersion(version string) string {
 	//http://chromedriver.storage.googleapis.com/index.html
 	url := "http://chromedriver.storage.googleapis.com/%s/chromedriver_win32.zip"
-	v := "96.0.4664.45"
+	v := "114.0.5735.16"
 	switch version {
 	case "70":
 		v = "70.0.3538.97"
