@@ -73,7 +73,7 @@ func (this *Entity) Run(fn func(i IPage)) (err error) {
 				err = this.Run(fn)
 			}
 		}
-		log.Println("[信息] 执行结束...")
+		//log.Println("[信息] 爬虫执行结束...")
 		//<-time.After(time.Second * 20)
 	}()
 
@@ -162,7 +162,7 @@ func (this Page) WaitMin(n int) Page {
 	return this
 }
 
-//返回页面数据
+// 返回页面数据
 func (this Page) String() string {
 	return this.Text()
 }

@@ -56,14 +56,7 @@ func (this *gui) SetBar(rate float64) {
 	this.Set("bar", rate)
 }
 
-func (this *gui) SetDownload(enable bool) {
-	if enable {
-		this.Set("download", "停止下载")
-	} else {
-		this.Set("download", "下载")
-	}
-}
-
+// SetConfig 设置配置到界面
 func (this *gui) SetConfig() {
 	this.APP.SetValueByID("download_addr", this.GetString("download_addr"))
 	this.APP.SetValueByID("download_dir", this.GetString("download_dir", "./"))
@@ -73,21 +66,21 @@ func (this *gui) SetConfig() {
 
 }
 
-// DecodeConfig 获取配置
-func (this *gui) DecodeConfig(app lorca.APP) (*Config, error) {
+// GetConfig 获取配置,并保存
+func (this *gui) GetConfig() (*Config, error) {
 	c := &Config{
-		DownloadAddr: strings.TrimSpace(conv.String(app.GetValueByID("download_addr"))),
-		DownloadDir:  conv.String(app.GetValueByID("download_dir")),
-		DownloadName: conv.String(app.GetValueByID("download_name")),
-		EnableProxy:  app.Eval("document.getElementById('proxy_use').checked").Bool(),
-		ProxyAddr:    conv.String(app.GetValueByID("proxy_addr")),
-		DoneVoice:    app.Eval("document.getElementById('done_voice').checked").Bool(),
+		DownloadAddr: strings.TrimSpace(conv.String(this.APP.GetValueByID("download_addr"))),
+		DownloadDir:  conv.String(this.APP.GetValueByID("download_dir")),
+		DownloadName: conv.String(this.APP.GetValueByID("download_name")),
+		EnableProxy:  this.APP.Eval("document.getElementById('proxy_use').checked").Bool(),
+		ProxyAddr:    conv.String(this.APP.GetValueByID("proxy_addr")),
+		DoneVoice:    this.APP.Eval("document.getElementById('done_voice').checked").Bool(),
 	}
 	if len(c.DownloadDir) == 0 {
 		c.DownloadDir = "./"
 	}
 	oss.New(c.DownloadDir, 0777)
-	if err := this.SaveConfig(c); err != nil {
+	if err := this.saveConfig(c); err != nil {
 		return nil, err
 	}
 	if len(c.DownloadAddr) == 0 {
@@ -97,7 +90,8 @@ func (this *gui) DecodeConfig(app lorca.APP) (*Config, error) {
 	return c, nil
 }
 
-func (this *gui) SaveConfig(cfg *Config) error {
+// saveConfig 保存配置
+func (this *gui) saveConfig(cfg *Config) error {
 	this.File.Set("download_addr", cfg.DownloadAddr)
 	this.File.Set("download_dir", cfg.DownloadDir)
 	this.File.Set("proxy_addr", cfg.ProxyAddr)
@@ -105,6 +99,14 @@ func (this *gui) SaveConfig(cfg *Config) error {
 	return this.File.Cover()
 }
 
+func (this *gui) DownloadDriver() error {
+	//b:=bar.New().
+	return spider.Install(func(bs []byte) {
+
+	})
+}
+
+// Config 配置字段
 type Config struct {
 	DownloadAddr string //资源地址
 	DownloadDir  string //下载目录
@@ -114,8 +116,8 @@ type Config struct {
 	DoneVoice    bool   //下载完成声音
 }
 
-// findUrl 通过资源地址获取到下载连接
-func (this *Config) findUrl() ([]string, error) {
+// FindUrl 通过资源地址获取到下载连接
+func (this *Config) FindUrl() ([]string, error) {
 
 	u := this.DownloadAddr
 
@@ -132,6 +134,7 @@ func (this *Config) findUrl() ([]string, error) {
 		p := i.Open(u)
 		p.WaitSec(3)
 
+		//爬取前
 		switch {
 		case strings.Contains(u, "91pron"): //处理91pron
 			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
@@ -153,6 +156,7 @@ func (this *Config) findUrl() ([]string, error) {
 			g.PanicErr(p.SwitchFrame(nil))
 		}
 
+		//爬取后
 		switch {
 		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg"):
 			for idx, v := range urls {
@@ -161,9 +165,9 @@ func (this *Config) findUrl() ([]string, error) {
 		}
 
 	}); err != nil {
-		logs.Err(err)
 		return nil, err
 	}
+	logs.Debug("爬取成功...")
 
 	{ //去除重复地址
 		m := make(map[string]string)
@@ -204,12 +208,14 @@ func (this *Config) findUrl() ([]string, error) {
 	return urls, nil
 }
 
-func (this *Config) CreateFile(idx int, urlFilename string) (*os.File, error) {
+// createFile 新建文件
+func (this *Config) createFile(idx int, urlFilename string) (*os.File, error) {
 	filename := conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName+"_"+strconv.Itoa(idx)+filepath.Ext(urlFilename))
 	logs.Debug("文件名称: ", filename)
 	return os.Create(this.DownloadDir + filename)
 }
 
+// Download 下载
 func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (err error) {
 
 	logs.Debug("资源地址: ", url)
@@ -219,7 +225,7 @@ func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string)
 		return err
 	}
 
-	f, err := this.CreateFile(idx, l.Filename())
+	f, err := this.createFile(idx, l.Filename())
 	if err != nil {
 		return err
 	}
@@ -255,21 +261,26 @@ func New() error {
 
 			gui.Set("download", "停止下载")
 			defer gui.Set("download", "开始下载")
-			gui.SetLog("")
 
 			//获取配置信息,并保存
-			config, err := gui.DecodeConfig(app)
+			config, err := gui.GetConfig()
 			if err != nil {
-				gui.SetLog(err.Error())
+				gui.SetLog(fmt.Sprintf("%#v", err.Error()))
 				return
 			}
 
-			urls, err := config.findUrl()
+			//根据配置获取到下载地址
+			urls, err := config.FindUrl()
 			if err != nil {
-				gui.SetLog(err.Error())
+				logs.Err(err)
+				gui.SetLog(fmt.Sprintf("%#v", err.Error()))
+				if strings.Contains(err.Error(), "unknown error - 33: session not created: This version of ChromeDriver only supports Chrome version") {
+					gui.SetLog("浏览器和驱动不兼容,请手动删除老版本驱动chromedriver.exe,然后重启")
+				}
 				return
 			}
 
+			//开始下载,按顺序下载
 			for i, url := range urls {
 				gui.SetLog(url)
 				start := time.Now()
@@ -278,15 +289,15 @@ func New() error {
 				logs.Debug("下载完成,结果: ", conv.New(err).String("成功"))
 			}
 
+			//播放下载完成提示音
 			if config.DoneVoice {
-				voice.Speak("叮咚. 你的视频已下载完成")
+				go voice.Speak("叮咚. 你的视频已下载完成")
 			}
 
 		})
 
-		return app.Bind("run", func() {
-			running := app.GetValueByID("download") == "开始下载"
-			app.SetValueByID("download", conv.SelectString(running, "停止下载", "开始下载"))
+		return gui.Bind("run", func() {
+			running := gui.Get("download") == "开始下载"
 			enable.Enable(running)
 		})
 
