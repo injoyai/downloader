@@ -261,6 +261,7 @@ func New() error {
 		enable := chans.NewRerun(func(ctx context.Context) {
 
 			gui.Set("download", "停止下载")
+			gui.Set("bar", 0)
 			defer gui.Set("download", "开始下载")
 
 			//获取配置信息,并保存
