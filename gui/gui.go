@@ -127,26 +127,15 @@ func (this *Config) FindUrl() ([]string, error) {
 	}
 
 	if !strings.Contains(u, "http") {
-		return nil, errors.New("invalid url")
+		return nil, errors.New("无效资源地址")
 	}
+
 	logs.Debug("开始爬取...")
 	if err := spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
 
-		//爬取前
-		switch {
-		case strings.Contains(u, "91pron"): //处理91pron
-			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
-			for _, v := range list {
-				num := v[4:]
-				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
-			}
-			if len(list) > 0 {
-				return
-			}
-		}
-
+		//正则匹配数据,包括iframe
 		urls = m3u8.RegexpAll(p.String())
 		iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
 		g.PanicErr(err)
@@ -156,12 +145,42 @@ func (this *Config) FindUrl() ([]string, error) {
 			g.PanicErr(p.SwitchFrame(nil))
 		}
 
-		//爬取后
 		switch {
-		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg"):
+
+		case strings.Contains(u, "91pron"):
+
+			//特殊处理91pron
+			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
+			for _, v := range list {
+				num := v[4:]
+				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
+			}
+
+		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg") || strings.Contains(u, "hy9hz1.xxousm.com"):
+
+			//特殊处理51cg
 			for idx, v := range urls {
 				urls[idx] = strings.ReplaceAll(v, `\/`, "/") + "&v=3&time=0"
 			}
+
+		default:
+
+			//特殊处理网站,忘记是啥网站了
+			for i, v := range urls {
+				if strings.Contains(v, `//test.`) {
+					host := str.CropLast(v, "/")
+					bs, _ := http.GetBytes(host)
+					for _, s := range regexp.MustCompile(`>(.*?)\.m3u8<`).FindAllString(string(bs), -1) {
+						s = str.CropFirst(s, ">", false)
+						s = str.CropLast(s, "<", false)
+						if filepath.Base(v) != s {
+							urls[i] = host + s
+							break
+						}
+					}
+				}
+			}
+
 		}
 
 	}); err != nil {
@@ -180,24 +199,6 @@ func (this *Config) FindUrl() ([]string, error) {
 		urls = []string{}
 		for _, m3u8Url := range m {
 			urls = append(urls, m3u8Url)
-		}
-	}
-
-	{ //特殊处理网站
-		for i, v := range urls {
-			if strings.Contains(v, `//test.`) {
-				host := str.CropLast(v, "/")
-				bs, _ := http.GetBytes(host)
-				for _, s := range regexp.MustCompile(`>(.*?)\.m3u8<`).FindAllString(string(bs), -1) {
-					s = str.CropFirst(s, ">", false)
-					s = str.CropLast(s, "<", false)
-					if filepath.Base(v) != s {
-						urls[i] = host + s
-						break
-					}
-				}
-
-			}
 		}
 	}
 
