@@ -8,10 +8,10 @@ import (
 	"github.com/injoyai/logs"
 )
 
-var Debug = true
+var Debug = ""
 
 func init() {
-	logs.SetLevel(conv.Select(Debug, logs.LevelAll, logs.LevelNone).(logs.Level))
+	logs.SetLevel(conv.Select(Debug == "true", logs.LevelAll, logs.LevelNone).(logs.Level))
 }
 
 // http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8
