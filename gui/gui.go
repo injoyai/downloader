@@ -260,9 +260,9 @@ func New() error {
 
 		enable := chans.NewRerun(func(ctx context.Context) {
 
-			gui.Set("download", "停止下载")
-			gui.Set("bar", 0)
-			defer gui.Set("download", "开始下载")
+			//gui.Set("download", "停止下载")
+			//gui.Set("bar", 0)
+			//defer gui.Set("download", "开始下载")
 
 			//获取配置信息,并保存
 			config, err := gui.GetConfig()
@@ -300,6 +300,11 @@ func New() error {
 
 		return gui.Bind("run", func() {
 			running := gui.Get("download") == "开始下载"
+			gui.Set("download", conv.SelectString(running, "停止下载", "开始下载"))
+			if running {
+				gui.Set("bar", 0)
+				gui.SetLog("开始下载")
+			}
 			enable.Enable(running)
 		})
 
