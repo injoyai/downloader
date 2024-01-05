@@ -85,9 +85,10 @@ func Decode(uri string, bs []byte) (resp *Response, err error) {
 					}
 				}
 			}
-		case strings.HasPrefix(s, "#EXTINF:"):
+		case strings.HasPrefix(s, "#EXTINF:") || strings.HasPrefix(s, "#EXT-X-STREAM-INF"):
 			//下一行是下载地址
 			nextItem = true
+
 		case strings.HasPrefix(s, "#EXT-X-ENDLIST"):
 			//列表结束
 			break
@@ -129,8 +130,20 @@ func (this *decrypt) Decrypt(bs []byte) (_ []byte, err error) {
 
  */
 
-func (this *Response) List() (list []download.Item) {
+func (this *Response) List() (list []download.Item, err error) {
 	for i, v := range this.TS_URL {
+		if strings.HasSuffix(v, ".m3u8") {
+			resp, err := NewResponse(v)
+			if err != nil {
+				return nil, err
+			}
+			ls, err := resp.List()
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, ls...)
+			continue
+		}
 		list = append(list, &item{
 			decrypt: this.decrypt,
 			idx:     i,
@@ -146,7 +159,11 @@ func NewTask(url string) (download.Task, error) {
 		return nil, err
 	}
 	result := download.NewList(filepath.Join(resp.Filename()))
-	for _, v := range resp.List() {
+	list, err := resp.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range list {
 		result.Append(v)
 	}
 	return result, nil

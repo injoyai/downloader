@@ -116,12 +116,35 @@ type Config struct {
 	DoneVoice    bool   //下载完成声音
 }
 
+func (this *Config) deepFind(p spider.Page) ([]string, error) {
+	urls := m3u8.RegexpAll(p.String())
+	iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range iframes {
+		if err := p.SwitchFrame(v); err != nil {
+			logs.Err(err)
+			return nil, err
+		}
+		ls, err := this.deepFind(p)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, ls...) // m3u8.RegexpAll(p.String())...)
+		if err := p.SwitchFrame(nil); err != nil {
+			logs.Err(err)
+			return nil, err
+		}
+	}
+	return urls, nil
+}
+
 // FindUrl 通过资源地址获取到下载连接
-func (this *Config) FindUrl() ([]string, error) {
+func (this *Config) FindUrl() (urls []string, err error) {
 
 	u := this.DownloadAddr
 
-	urls := []string(nil)
 	if strings.Contains(u, ".m3u8") {
 		return []string{u}, nil
 	}
@@ -136,13 +159,12 @@ func (this *Config) FindUrl() ([]string, error) {
 		p.WaitSec(3)
 
 		//正则匹配数据,包括iframe
-		urls = m3u8.RegexpAll(p.String())
-		iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
+		urls, err = this.deepFind(p)
 		g.PanicErr(err)
-		for _, v := range iframes {
-			g.PanicErr(p.SwitchFrame(v))
-			urls = append(urls, m3u8.RegexpAll(p.String())...)
-			g.PanicErr(p.SwitchFrame(nil))
+
+		//去除转义符
+		for idx, v := range urls {
+			urls[idx] = strings.ReplaceAll(v, `\/`, "/")
 		}
 
 		switch {
@@ -160,7 +182,7 @@ func (this *Config) FindUrl() ([]string, error) {
 
 			//特殊处理51cg
 			for idx, v := range urls {
-				urls[idx] = strings.ReplaceAll(v, `\/`, "/") + "&v=3&time=0"
+				urls[idx] = v + "&v=3&time=0"
 			}
 
 		default:
@@ -205,6 +227,7 @@ func (this *Config) FindUrl() ([]string, error) {
 	if len(urls) == 0 {
 		return nil, errors.New("没有找到资源")
 	}
+	logs.Debug("资源地址: ", urls)
 
 	return urls, nil
 }
@@ -260,9 +283,9 @@ func New() error {
 
 		enable := chans.NewRerun(func(ctx context.Context) {
 
-			//gui.Set("download", "停止下载")
-			//gui.Set("bar", 0)
-			//defer gui.Set("download", "开始下载")
+			gui.Set("download", "停止下载")
+			gui.Set("bar", 0)
+			defer gui.Set("download", "开始下载")
 
 			//获取配置信息,并保存
 			config, err := gui.GetConfig()
@@ -293,7 +316,7 @@ func New() error {
 
 			//播放下载完成提示音
 			if config.DoneVoice {
-				go voice.Speak("叮咚. 你的视频已下载完成")
+				go voice.Speak("叮咚. 你的视频已下载结束")
 			}
 
 		})
