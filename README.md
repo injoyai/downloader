@@ -4,10 +4,10 @@
 
 * 必须: Google浏览器(Chrome),后续会增加火狐的支持
 * 提供图形界面,使用lorca(https://github.com/zserge/lorca)实现,需要Google浏览器(Chrome)
-* 提供爬虫功能,能爬取普通网页(支持js,动态加载,iframe)的所有m3u8资源,使用selenium(github.com/tebeka/selenium)
+* 提供爬虫功能,能爬取普通网页(支持js,动态加载,iframe)的所有m3u8资源,使用selenium(https://github.com/tebeka/selenium)
   实现,需要Google浏览器(Chrome),114.xxxx.xx及以下版本
 * Chromedriver驱动版本目前(2023-12)只支持v114.xxxx.xx及以下版本的浏览器
-* Chrome历史版本下载地址地址(https://chromedriver.storage.googleapis.com/index.html)
+* Chrome历史版本下载地址(https://chromedriver.storage.googleapis.com/index.html)
 * 目前只支持m3u8资源下载,后续增加其它类型的资源
 * 下载完成后,默认后缀为.ts
 * 显示下载进度,下载用时
@@ -15,10 +15,10 @@
 
 ## 使用说明
 
-* [版本下载.windows](https://github.com/injoyai/downloader/releases/latest/download/downloader.exe)
+* [工具下载.windows](https://github.com/injoyai/downloader/releases/latest/download/downloader.exe)
 * 下载地址(例 http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8)
   或者普通网页地址(例 https://www.wangfei.tv/vodplay/302601-3-1.html)
-* 保存名称可选,重命名文件(可选,xx,xx.ts,xx.mp4) ,存在相同名字文件会被覆盖
+* 保存名称可选,存在相同名字文件会被覆盖
 * 等待进度条完成,或显示下载成功xxx ,则完成下载
   ![](doc/downloader.png)
 
@@ -41,3 +41,5 @@
 ## 常见问题
 
 1. 开始能正常使用的爬虫功能,一段时间后却不能使用了,可能原因是浏览器升级了,驱动版本不兼容,解决方法删除驱动文件chromedriver.exe,并重新打开工具
+2. 最近发现最新浏览器版本太高,驱动还未适配,爬虫功能需要卸载流浪器并重新安装老版本浏览器,历史版本下载地址(https://chromedriver.storage.googleapis.com/index.html)
+   然后禁止浏览器升级,默认安装的话,在C:\Program Files (x86)\Google\Update\,把GoogleUpdate.exe设置禁止执行(右键-属性-安全,全部设置成拒绝执行)
