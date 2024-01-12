@@ -15,6 +15,7 @@ import (
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/notice/voice"
 	"github.com/injoyai/goutil/str"
+	"github.com/injoyai/goutil/str/bar"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"github.com/tebeka/selenium"
@@ -79,6 +80,9 @@ func (this *gui) GetConfig() (*Config, error) {
 	if len(c.DownloadDir) == 0 {
 		c.DownloadDir = "./"
 	}
+	if c.CoroutineNum == 0 {
+		c.CoroutineNum = 20
+	}
 	oss.New(c.DownloadDir, 0777)
 	if err := this.saveConfig(c); err != nil {
 		return nil, err
@@ -114,6 +118,7 @@ type Config struct {
 	EnableProxy  bool   //启用代理
 	ProxyAddr    string //代理地址
 	DoneVoice    bool   //下载完成声音
+	CoroutineNum int    //协程数量
 }
 
 func (this *Config) deepFind(p spider.Page) ([]string, error) {
@@ -131,7 +136,7 @@ func (this *Config) deepFind(p spider.Page) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		urls = append(urls, ls...) // m3u8.RegexpAll(p.String())...)
+		urls = append(urls, ls...)
 		if err := p.SwitchFrame(nil); err != nil {
 			logs.Err(err)
 			return nil, err
@@ -240,30 +245,53 @@ func (this *Config) createFile(idx int, urlFilename string) (*os.File, error) {
 }
 
 // Download 下载
-func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (err error) {
+func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (size int64, err error) {
 
+	logs.Debug("----------------------------------------------------------------------------------------------------")
 	logs.Debug("资源地址: ", url)
 
-	l, err := m3u8.NewTask(url)
+	task, filename, err := m3u8.NewTask(url)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	f, err := this.createFile(idx, l.Filename())
+	logs.Debug("分片数量: ", task.Len())
+	logs.Debug("协程数量: ", this.CoroutineNum)
+
+	f, err := this.createFile(idx, filename)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
 
+	done := make(chan struct{}, 1)
+	task.SetWriter(f)
+	task.SetLimit(20)
+	task.SetRetry(3)
+	task.SetDoneAll(func() {
+		done <- struct{}{}
+	})
 	current := uint32(0)
-	errs := download.NewWithContext(ctx, &download.Option{Limit: 20}).Run(l, f, func() {
+	errs := []error(nil)
+	task.SetDoneItem(func(i int, err error) {
 		value := atomic.AddUint32(&current, 1)
-		rate := (float64(value) / float64(l.Len())) * 100
+		rate := (float64(value) / float64(task.Len())) * 100
 		gui.SetBar(rate)
 		gui.SetLog(fmt.Sprintf("%0.1f%%", rate))
+		if err != nil {
+			errs = append(errs, err)
+		}
 	})
 
-	return append(errs, nil)[0]
+	download.NewWithContext(ctx).Append(task)
+	<-done
+
+	fs, err := f.Stat()
+	if err != nil {
+		return 0, append(errs, nil)[0]
+	}
+
+	return fs.Size(), append(errs, nil)[0]
 }
 
 func New() error {
@@ -309,9 +337,12 @@ func New() error {
 			for i, url := range urls {
 				gui.SetLog(url)
 				start := time.Now()
-				err := config.Download(ctx, gui, i, url)
+				size, err := config.Download(ctx, gui, i, url)
 				gui.SetLog(conv.SelectString(err == nil, "下载成功,用时"+time.Now().Sub(start).String(), "下载失败: "+conv.String(err)))
-				logs.Debug("下载完成,结果: ", conv.New(err).String("成功"))
+				logs.Debug("下载结果: ", conv.New(err).String("成功"))
+				logs.Debug("下载用时: ", time.Now().Sub(start).String())
+				fSize, unit := bar.ToB(size)
+				logs.Debugf("文件大小: %0.2f%s\n\n", fSize, unit)
 			}
 
 			//播放下载完成提示音

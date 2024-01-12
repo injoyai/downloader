@@ -1,6 +1,7 @@
 package m3u8
 
 import (
+	"context"
 	"encoding/hex"
 	"github.com/injoyai/base/bytes/crypt/aes"
 	"github.com/injoyai/downloader/download"
@@ -130,8 +131,8 @@ func (this *decrypt) Decrypt(bs []byte) (_ []byte, err error) {
 
  */
 
-func (this *Response) List() (list []download.Item, err error) {
-	for i, v := range this.TS_URL {
+func (this *Response) List() (list []*item, err error) {
+	for _, v := range this.TS_URL {
 		if strings.HasSuffix(v, ".m3u8") {
 			resp, err := NewResponse(v)
 			if err != nil {
@@ -146,40 +147,34 @@ func (this *Response) List() (list []download.Item, err error) {
 		}
 		list = append(list, &item{
 			decrypt: this.decrypt,
-			idx:     i,
 			url:     v,
 		})
 	}
 	return
 }
 
-func NewTask(url string) (download.Task, error) {
+func NewTask(url string) (*download.Task, string, error) {
 	resp, err := NewResponse(url)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	result := download.NewList(filepath.Join(resp.Filename()))
 	list, err := resp.List()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	task := download.NewTask()
 	for _, v := range list {
-		result.Append(v)
+		task.Append(v)
 	}
-	return result, nil
+	return task, resp.Filename(), nil
 }
 
 type item struct {
 	decrypt
-	idx int
 	url string
 }
 
-func (this *item) Idx() int {
-	return this.idx
-}
-
-func (this *item) Run() ([]byte, error) {
+func (this *item) GetBytes(ctx context.Context) ([]byte, error) {
 	bs, err := http.GetBytes(this.url)
 	if err != nil {
 		return nil, err

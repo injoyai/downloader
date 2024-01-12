@@ -8,7 +8,7 @@ import (
 	"github.com/injoyai/logs"
 )
 
-var Debug = ""
+var Debug = "true"
 
 func init() {
 	logs.SetLevel(conv.Select(Debug == "true", logs.LevelAll, logs.LevelNone).(logs.Level))

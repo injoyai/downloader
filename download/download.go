@@ -2,91 +2,59 @@ package download
 
 import (
 	"context"
-	"github.com/injoyai/base/chans"
-	"io"
-	"time"
+	"github.com/injoyai/goutil/g"
 )
 
-func New(op *Option) *Downloader {
-	return NewWithContext(context.Background(), op)
+func New() *Download {
+	return NewWithContext(g.Ctx())
 }
 
-func NewWithContext(ctx context.Context, op *Option) *Downloader {
-	op = op.new()
-	ctx, cancel := context.WithCancel(ctx)
-	return &Downloader{
-		limit:  op.Limit,
+func NewWithContext(ctx context.Context) *Download {
+	ctx, cancel := g.WithCancel(ctx)
+	d := &Download{
+		C:      make(chan *Task),
 		ctx:    ctx,
 		cancel: cancel,
-		retry:  op.Retry,
 	}
+	go d.run()
+	return d
 }
 
-type Downloader struct {
-	queue  chan Item          //普通队列
-	limit  uint               //协程数
-	ctx    context.Context    //ctx
-	cancel context.CancelFunc //cancel
-	retry  uint               //重试次数
-	err    []error            //错误
+type Download struct {
+	C      chan *Task
+	ctx    context.Context //ctx
+	cancel context.CancelFunc
 }
 
-func (this *Downloader) Retry() int {
-	if this.retry <= 0 {
-		return 1
+func (this *Download) Wait() {
+
+}
+
+func (this *Download) Append(t *Task) *Download {
+	select {
+	case <-this.ctx.Done():
+		return this
+	case this.C <- t:
 	}
-	return int(this.retry)
+	return this
 }
 
-func (this *Downloader) runTask(t Item) (bytes []byte, err error) {
-	for i := 0; i < this.Retry(); i++ {
-		bytes, err = t.Run()
-		if err == nil {
+func (this *Download) Close() error {
+	if this.cancel != nil {
+		this.cancel()
+	}
+	return nil
+}
+
+func (this *Download) run() {
+	for i := 0; ; i++ {
+		select {
+		case <-this.ctx.Done():
 			return
+		case t := <-this.C:
+			t.Download()
 		}
 	}
-	return
-}
-
-func (this *Downloader) Run(list Task, writer io.Writer, f ...func()) []error {
-	this.queue = make(chan Item, list.Len())
-	cache := make([][]byte, list.Len()) //+1)
-	for _, v := range list.List() {
-		this.queue <- v
-	}
-	//idx := 0
-	wg := chans.NewWaitLimit(this.limit)
-	fn := func(ctx context.Context, c chan Item) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case i := <-c:
-				wg.Add()
-				if cache[i.Idx()] == nil {
-					go func(t Item) {
-						defer wg.Done()
-						bytes, err := this.runTask(t)
-						if err == nil {
-							cache[i.Idx()] = bytes
-						} else {
-							this.err = append(this.err, err)
-						}
-						for _, v := range f {
-							v()
-						}
-					}(i)
-				}
-			}
-		}
-	}
-	go fn(this.ctx, this.queue)
-	time.Sleep(time.Second)
-	wg.Wait()
-	for _, bs := range cache {
-		writer.Write(bs)
-	}
-	return this.err
 }
 
 type Option struct {
