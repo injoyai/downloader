@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/injoyai/base v1.0.6
 	github.com/injoyai/conv v1.0.6
-	github.com/injoyai/goutil v0.0.0-20240104033652-8ef92faaa40d
+	github.com/injoyai/goutil v0.0.0-20240115051648-33bb1a848fb8
 	github.com/injoyai/io v0.1.0
 	github.com/injoyai/logs v1.0.6
 	github.com/injoyai/lorca v0.0.0-20230627160326-080af192fadc

@@ -6,23 +6,15 @@ import (
 	"fmt"
 	"github.com/injoyai/base/chans"
 	"github.com/injoyai/conv"
-	"github.com/injoyai/downloader/download"
-	"github.com/injoyai/downloader/download/m3u8"
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/goutil/cache"
-	"github.com/injoyai/goutil/g"
-	"github.com/injoyai/goutil/net/http"
 	"github.com/injoyai/goutil/oss"
+	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/other/notice/voice"
-	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/goutil/str/bar"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
-	"github.com/tebeka/selenium"
-	"net/url"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -83,6 +75,9 @@ func (this *gui) GetConfig() (*Config, error) {
 	if c.CoroutineNum == 0 {
 		c.CoroutineNum = 20
 	}
+	if c.RetryNum == 0 {
+		c.RetryNum = 3
+	}
 	oss.New(c.DownloadDir, 0777)
 	if err := this.saveConfig(c); err != nil {
 		return nil, err
@@ -118,180 +113,48 @@ type Config struct {
 	EnableProxy  bool   //启用代理
 	ProxyAddr    string //代理地址
 	DoneVoice    bool   //下载完成声音
-	CoroutineNum int    //协程数量
+	CoroutineNum uint   //协程数量
+	RetryNum     uint   //重试次数
 }
 
-func (this *Config) deepFind(p spider.Page) ([]string, error) {
-	urls := m3u8.RegexpAll(p.String())
-	iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range iframes {
-		if err := p.SwitchFrame(v); err != nil {
-			logs.Err(err)
-			return nil, err
-		}
-		ls, err := this.deepFind(p)
-		if err != nil {
-			return nil, err
-		}
-		urls = append(urls, ls...)
-		if err := p.SwitchFrame(nil); err != nil {
-			logs.Err(err)
-			return nil, err
-		}
-	}
-	return urls, nil
-}
-
-// FindUrl 通过资源地址获取到下载连接
-func (this *Config) FindUrl() (urls []string, err error) {
-
-	u := this.DownloadAddr
-
-	if strings.Contains(u, ".m3u8") {
-		return []string{u}, nil
-	}
-
-	if !strings.Contains(u, "http") {
-		return nil, errors.New("无效资源地址")
-	}
-
-	logs.Debug("开始爬取...")
-	if err := spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
-		p := i.Open(u)
-		p.WaitSec(3)
-
-		//正则匹配数据,包括iframe
-		urls, err = this.deepFind(p)
-		g.PanicErr(err)
-
-		//去除转义符
-		for idx, v := range urls {
-			urls[idx] = strings.ReplaceAll(v, `\/`, "/")
-		}
-
-		switch {
-
-		case strings.Contains(u, "91pron"):
-
-			//特殊处理91pron
-			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
-			for _, v := range list {
-				num := v[4:]
-				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
-			}
-
-		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg") || strings.Contains(u, "hy9hz1.xxousm.com"):
-
-			//特殊处理51cg
-			for idx, v := range urls {
-				urls[idx] = v + "&v=3&time=0"
-			}
-
-		default:
-
-			//特殊处理网站,忘记是啥网站了
-			for i, v := range urls {
-				if strings.Contains(v, `//test.`) {
-					host := str.CropLast(v, "/")
-					bs, _ := http.GetBytes(host)
-					for _, s := range regexp.MustCompile(`>(.*?)\.m3u8<`).FindAllString(string(bs), -1) {
-						s = str.CropFirst(s, ">", false)
-						s = str.CropLast(s, "<", false)
-						if filepath.Base(v) != s {
-							urls[i] = host + s
-							break
-						}
-					}
-				}
-			}
-
-		}
-
-	}); err != nil {
-		return nil, err
-	}
-	logs.Debug("爬取成功...")
-
-	{ //去除重复地址
-		m := make(map[string]string)
-		for _, v := range urls {
-			u, err := url.Parse(v)
-			if err == nil {
-				m[u.Path] = v
-			}
-		}
-		urls = []string{}
-		for _, m3u8Url := range m {
-			urls = append(urls, m3u8Url)
-		}
-	}
-
-	if len(urls) == 0 {
-		return nil, errors.New("没有找到资源")
-	}
-	logs.Debug("资源地址: ", urls)
-
-	return urls, nil
-}
-
-// createFile 新建文件
-func (this *Config) createFile(idx int, urlFilename string) (*os.File, error) {
-	filename := conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName+"_"+strconv.Itoa(idx)+filepath.Ext(urlFilename))
-	logs.Debug("文件名称: ", filename)
-	return os.Create(this.DownloadDir + filename)
+// filename 新文件名称
+func (this *Config) filename(idx int, urlFilename string) string {
+	return conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName+"_"+strconv.Itoa(idx)+filepath.Ext(urlFilename))
 }
 
 // Download 下载
 func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (size int64, err error) {
 
-	logs.Debug("----------------------------------------------------------------------------------------------------")
 	logs.Debug("资源地址: ", url)
 
-	task, filename, err := m3u8.NewTask(url)
+	task, filename, err := getTask(url)
 	if err != nil {
 		return 0, err
 	}
 
 	logs.Debug("分片数量: ", task.Len())
 	logs.Debug("协程数量: ", this.CoroutineNum)
+	logs.Debug("重试次数: ", this.RetryNum)
 
-	f, err := this.createFile(idx, filename)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
+	filename = this.filename(idx, filename)
+	logs.Debug("文件名称: ", filename)
 
-	done := make(chan struct{}, 1)
-	task.SetWriter(f)
-	task.SetLimit(20)
-	task.SetRetry(3)
-	task.SetDoneAll(func() {
-		done <- struct{}{}
-	})
 	current := uint32(0)
-	errs := []error(nil)
-	task.SetDoneItem(func(i int, err error) {
+	start := time.Now()
+	task.SetDoneAllWithFile(filename)
+	task.SetLimit(this.CoroutineNum)
+	task.SetRetry(this.RetryNum)
+	task.SetDoneItem(func(ctx context.Context, resp *download.DoneItemResp) {
 		value := atomic.AddUint32(&current, 1)
+		size += resp.GetSize()
 		rate := (float64(value) / float64(task.Len())) * 100
 		gui.SetBar(rate)
-		gui.SetLog(fmt.Sprintf("%0.1f%%", rate))
-		if err != nil {
-			errs = append(errs, err)
-		}
+		speed, speedUnit := bar.ToB(size)
+		speed /= time.Since(start).Seconds()
+		gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s", rate, speed, speedUnit))
 	})
 
-	download.NewWithContext(ctx).Append(task)
-	<-done
-
-	fs, err := f.Stat()
-	if err != nil {
-		return 0, append(errs, nil)[0]
-	}
-
-	return fs.Size(), append(errs, nil)[0]
+	return size, task.Download(ctx)
 }
 
 func New() error {
@@ -337,12 +200,24 @@ func New() error {
 			for i, url := range urls {
 				gui.SetLog(url)
 				start := time.Now()
+				logs.Debug("----------------------------------------------------------------------------------------------------")
 				size, err := config.Download(ctx, gui, i, url)
-				gui.SetLog(conv.SelectString(err == nil, "下载成功,用时"+time.Now().Sub(start).String(), "下载失败: "+conv.String(err)))
-				logs.Debug("下载结果: ", conv.New(err).String("成功"))
-				logs.Debug("下载用时: ", time.Now().Sub(start).String())
+
+				spend := time.Now().Sub(start)
 				fSize, unit := bar.ToB(size)
-				logs.Debugf("文件大小: %0.2f%s\n\n", fSize, unit)
+				sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
+				spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
+				gui.SetLog(conv.SelectString(err == nil,
+					"下载成功"+
+						", 大小:"+sizeStr+
+						", 用时:"+time.Now().Sub(start).String()+
+						", 速度:"+spendStr,
+					"下载失败: "+conv.String(err)))
+				logs.Debug("下载结果: ", conv.New(err).String("成功"))
+				logs.Debug("下载用时: ", spend.String())
+				logs.Debug("文件大小: ", sizeStr)
+				logs.Debug("平均速度: ", spendStr)
+				logs.Debug("----------------------------------------------------------------------------------------------------")
 			}
 
 			//播放下载完成提示音

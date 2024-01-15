@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/injoyai/base/bytes/crypt/aes"
-	"github.com/injoyai/downloader/download"
 	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/str"
 	"net/url"
 	"path/filepath"
@@ -153,20 +153,20 @@ func (this *Response) List() (list []*item, err error) {
 	return
 }
 
-func NewTask(url string) (*download.Task, string, error) {
+func NewTask(url string) (*download.Task, error) {
 	resp, err := NewResponse(url)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	list, err := resp.List()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	task := download.NewTask()
 	for _, v := range list {
 		task.Append(v)
 	}
-	return task, resp.Filename(), nil
+	return task, nil
 }
 
 type item struct {

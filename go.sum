@@ -676,8 +676,8 @@ github.com/injoyai/conv v1.0.4/go.mod h1:rqBoiZt/YSKjGYEH4F6z+56djYLFkgKt/kWK5/1
 github.com/injoyai/conv v1.0.5/go.mod h1:rqBoiZt/YSKjGYEH4F6z+56djYLFkgKt/kWK5/1X640=
 github.com/injoyai/conv v1.0.6 h1:F2mYlLaiaXvIRkq6EljPkIl5PfQbqYPeOJ3Vqnv68hU=
 github.com/injoyai/conv v1.0.6/go.mod h1:rqBoiZt/YSKjGYEH4F6z+56djYLFkgKt/kWK5/1X640=
-github.com/injoyai/goutil v0.0.0-20240104033652-8ef92faaa40d h1:itj+71nJU6knZGYJVn4yVgy3jA1ACDLnz8SVwRr2XNg=
-github.com/injoyai/goutil v0.0.0-20240104033652-8ef92faaa40d/go.mod h1:oItm+EdzWm7x0F4JW58TCqgE1JD7TKjMJhXhqyaZKkY=
+github.com/injoyai/goutil v0.0.0-20240115051648-33bb1a848fb8 h1:Mxd3I6Wkw0m8MYvEErMg+bqQufozaZy6lBsokfb06bg=
+github.com/injoyai/goutil v0.0.0-20240115051648-33bb1a848fb8/go.mod h1:oItm+EdzWm7x0F4JW58TCqgE1JD7TKjMJhXhqyaZKkY=
 github.com/injoyai/io v0.1.0 h1:tvlvLQjWpolIyJZNnrLXW8G6M131p0ARQsdAlMXM+IY=
 github.com/injoyai/io v0.1.0/go.mod h1:g4oJcg15xJHxe5GsrrlVPTTO5xz7Xk378mOy75+Lxfo=
 github.com/injoyai/logs v1.0.2/go.mod h1:CLchJCGhb39Obyrci816R+KMtbxZhgPs0FuikhyixK4=
