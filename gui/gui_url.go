@@ -16,8 +16,17 @@ import (
 	"strings"
 )
 
+var (
+	Regexp = regexp.MustCompile(`(http://|https://)[a-zA-Z0-9\\/=_\-.:%&]+\.(m3u8|mp4)([\?a-zA-Z0-9/=_\-.*%&]+)`)
+)
+
+func RegexpAll(s string) []string {
+	return Regexp.FindAllString(s, -1)
+}
+
 func (this *Config) deepFind(p spider.Page) ([]string, error) {
 	urls := m3u8.RegexpAll(p.String())
+	//urls := RegexpAll(p.String())
 	iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
 	if err != nil {
 		return nil, err

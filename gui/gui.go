@@ -21,13 +21,6 @@ import (
 	"time"
 )
 
-type Interface interface {
-	Set(key string, value string) error //设置属性
-	Get(key string) (string, error)     //获取属性
-	SetLog(value string)                //设置日志
-	SetDownload(enable bool)            //设置下载开始/结束
-}
-
 type gui struct {
 	lorca.APP
 	*cache.File
