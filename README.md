@@ -7,7 +7,7 @@
 * 提供爬虫功能,能爬取普通网页(支持js,动态加载,iframe)的所有m3u8资源,使用selenium(https://github.com/tebeka/selenium)
   实现,需要Google浏览器(Chrome),114.xxxx.xx及以下版本
 * Chromedriver驱动版本目前(2023-12)只支持v114.xxxx.xx及以下版本的浏览器
-* Chrome历史版本下载地址(https://chromedriver.storage.googleapis.com/index.html)
+* Chrome历史版本下载地址(https://www.slimjet.com/chrome/google-chrome-old-version.php)
 * 目前只支持m3u8资源下载,后续增加其它类型的资源
 * 下载完成后,默认后缀为.ts
 * 显示下载进度,下载用时
@@ -41,5 +41,5 @@
 ## 常见问题
 
 1. 开始能正常使用的爬虫功能,一段时间后却不能使用了,可能原因是浏览器升级了,驱动版本不兼容,解决方法删除驱动文件chromedriver.exe,并重新打开工具
-2. 最近发现最新浏览器版本太高,驱动还未适配,爬虫功能需要卸载流浪器并重新安装老版本浏览器,历史版本下载地址(https://chromedriver.storage.googleapis.com/index.html)
+2. 最近发现最新浏览器版本太高,驱动还未适配,爬虫功能需要卸载流浪器并重新安装老版本浏览器,历史版本下载地址(https://www.slimjet.com/chrome/google-chrome-old-version.php)
    然后禁止浏览器升级,默认安装的话,在C:\Program Files (x86)\Google\Update\,把GoogleUpdate.exe设置禁止执行(右键-属性-安全,全部设置成拒绝执行)
