@@ -1,25 +1,26 @@
 package spider
 
 import (
-	_ "embed"
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/oss/compress/zip"
+	"path/filepath"
 )
 
-func Install(bs []byte) error {
+func Install(browserDir string, chromeZip []byte) error {
 
-	//下载文件
-	if oss.Exists("./browser/chrome/chrome.exe") {
+	chromeZipPath := filepath.Join(browserDir, "chrome.zip")
+	chromeExePath := filepath.Join(browserDir, "chrome/chrome.exe")
+
+	if oss.Exists(chromeExePath) {
 		return nil
 	}
 
-	if err := oss.New("./browser/chrome.zip", bs); err != nil {
+	if err := oss.New(chromeZipPath, chromeZip); err != nil {
 		return err
 	}
-	defer oss.Remove("./browser/chrome.zip")
-	defer oss.Remove("./browser/hrome")
+	defer oss.Remove(chromeZipPath)
 
-	if err := zip.Decode("./browser/chrome.zip", "./browser/"); err != nil {
+	if err := zip.Decode(chromeZipPath, browserDir); err != nil {
 		return err
 	}
 

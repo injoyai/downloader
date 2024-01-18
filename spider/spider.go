@@ -31,6 +31,7 @@ type Entity struct {
 	seleniumDebug bool   //selenium调试模式
 	retry         uint   //重试次数
 	try           uint   //运行次数
+	browserPath   string //浏览器目录
 }
 
 // Retry 重试机制
@@ -103,7 +104,7 @@ func (this *Entity) Run(fn func(i IPage)) (err error) {
 	}
 	//设置浏览器参数
 	caps.AddChrome(chrome.Capabilities{
-		Path:  "./browser/chrome/chrome.exe",
+		Path:  this.browserPath,
 		Prefs: pref,
 		Args:  arg,
 	})
@@ -124,14 +125,15 @@ func (this *Entity) Run(fn func(i IPage)) (err error) {
 // 新建实例需要下载chromedriver
 // 查看浏览器版本Chrome://version
 // http://chromedriver.storage.googleapis.com/index.html
-func New(path string) *Entity {
+func New(driverPath, browserPath string) *Entity {
 	return &Entity{
 		system:        runtime.GOOS,
 		showWindow:    true,
 		showImg:       true,
-		seleniumPath:  path,
+		seleniumPath:  driverPath,
 		seleniumPort:  20165,
 		seleniumDebug: false,
+		browserPath:   browserPath,
 	}
 }
 

@@ -49,8 +49,8 @@ func (this *Config) deepFind(p spider.Page) ([]string, error) {
 	return urls, nil
 }
 
-// FindUrl 通过资源地址获取到下载连接
-func (this *Config) FindUrl() (urls []string, err error) {
+// FindUrlWithSelenium 通过资源地址获取到下载连接
+func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []string, err error) {
 
 	u := this.DownloadAddr
 
@@ -62,10 +62,15 @@ func (this *Config) FindUrl() (urls []string, err error) {
 		return nil, errors.New("无效资源地址")
 	}
 
-	logs.Debug("开始爬取...")
-	if err := spider.New("./browser/chrome/chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
+	logs.Debug("驱动位置: ", driverPath)
+	logs.Debug("浏览器位置: ", browserPath)
+	logs.Debug("开始爬取: ", u)
+	if err := spider.New(driverPath, browserPath).
+		ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
+
+		title, _ := p.Title()
 
 		//正则匹配数据,包括iframe
 		urls, err = this.deepFind(p)
@@ -87,7 +92,7 @@ func (this *Config) FindUrl() (urls []string, err error) {
 				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
 			}
 
-		case strings.Contains(u, "bedroom.uhnmon.com") || strings.Contains(u, "/51cg") || strings.Contains(u, "hy9hz1.xxousm.com"):
+		case strings.Contains(title, "51cg"):
 
 			//特殊处理51cg
 			for idx, v := range urls {
@@ -117,7 +122,6 @@ func (this *Config) FindUrl() (urls []string, err error) {
 	}); err != nil {
 		return nil, err
 	}
-	logs.Debug("爬取成功...")
 
 	{ //去除重复地址
 		m := make(map[string]string)
@@ -133,10 +137,11 @@ func (this *Config) FindUrl() (urls []string, err error) {
 		}
 	}
 
+	logs.Debug("爬取成功: ", urls)
+
 	if len(urls) == 0 {
 		return nil, errors.New("没有找到资源")
 	}
-	logs.Debug("资源地址: ", urls)
 
 	return urls, nil
 }

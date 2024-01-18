@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"github.com/injoyai/base/chans"
@@ -10,7 +11,6 @@ import (
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/other/notice/voice"
-	"github.com/injoyai/goutil/str/bar"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"path/filepath"
@@ -19,6 +19,9 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+//go:embed index.html
+var html string
 
 type gui struct {
 	lorca.APP
@@ -90,11 +93,6 @@ func (this *gui) saveConfig(cfg *Config) error {
 	return this.File.Cover()
 }
 
-func (this *gui) DownloadDriver() error {
-	return nil
-	//return spider.Install()
-}
-
 // Config 配置字段
 type Config struct {
 	DownloadAddr string //资源地址
@@ -131,7 +129,6 @@ func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string)
 
 	current := uint32(0)
 	start := time.Now()
-	task.SetDoneAllWithFile(filename)
 	task.SetLimit(this.CoroutineNum)
 	task.SetRetry(this.RetryNum)
 	task.SetDoneItem(func(ctx context.Context, resp *download.DoneItemResp) {
@@ -139,15 +136,17 @@ func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string)
 		size += resp.GetSize()
 		rate := (float64(value) / float64(task.Len())) * 100
 		gui.SetBar(rate)
-		speed, speedUnit := bar.ToB(size)
+		speed, speedUnit := oss.Size(size)
 		speed /= time.Since(start).Seconds()
 		gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s", rate, speed, speedUnit))
 	})
+	resp := task.Download(ctx)
+	_, err = resp.WriteToFile(filename)
 
-	return size, task.Download(ctx)
+	return size, err
 }
 
-func New() error {
+func New(configPath, driverPath, browserPath string) error {
 	return lorca.Run(&lorca.Config{
 		Width:  600,
 		Height: 442,
@@ -156,7 +155,7 @@ func New() error {
 
 		gui := &gui{
 			APP:  app,
-			File: cache.NewFile(oss.UserLocalDir(oss.DefaultName, "/download/config.json")),
+			File: cache.NewFile(configPath),
 		}
 
 		//设置配置信息到gui
@@ -176,7 +175,7 @@ func New() error {
 			}
 
 			//根据配置获取到下载地址
-			urls, err := config.FindUrl()
+			urls, err := config.FindUrlWithSelenium(driverPath, browserPath)
 			if err != nil {
 				logs.Err(err)
 				gui.SetLog(fmt.Sprintf("%#v", err.Error()))
@@ -194,7 +193,7 @@ func New() error {
 				size, err := config.Download(ctx, gui, i, url)
 
 				spend := time.Now().Sub(start)
-				fSize, unit := bar.ToB(size)
+				fSize, unit := oss.Size(size)
 				sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
 				spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
 				gui.SetLog(conv.SelectString(err == nil,
