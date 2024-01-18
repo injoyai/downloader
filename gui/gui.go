@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/injoyai/base/chans"
 	"github.com/injoyai/conv"
-	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/goutil/cache"
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/other/download"
@@ -92,10 +91,8 @@ func (this *gui) saveConfig(cfg *Config) error {
 }
 
 func (this *gui) DownloadDriver() error {
-	//b:=bar.New().
-	return spider.Install(func(bs []byte) {
-
-	})
+	return nil
+	//return spider.Install()
 }
 
 // Config 配置字段

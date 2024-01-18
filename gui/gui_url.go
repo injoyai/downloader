@@ -63,7 +63,7 @@ func (this *Config) FindUrl() (urls []string, err error) {
 	}
 
 	logs.Debug("开始爬取...")
-	if err := spider.New("./chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
+	if err := spider.New("./browser/chrome/chromedriver.exe").ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
 

@@ -103,6 +103,7 @@ func (this *Entity) Run(fn func(i IPage)) (err error) {
 	}
 	//设置浏览器参数
 	caps.AddChrome(chrome.Capabilities{
+		Path:  "./browser/chrome/chrome.exe",
 		Prefs: pref,
 		Args:  arg,
 	})
