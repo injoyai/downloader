@@ -6,8 +6,8 @@ import (
 	"github.com/injoyai/base/bytes/crypt/aes"
 	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/goutil/net/http"
-	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/str"
+	"github.com/injoyai/goutil/task"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -153,7 +153,7 @@ func (this *Response) List() (list []*item, err error) {
 	return
 }
 
-func NewTask(url string) (*download.Task, error) {
+func NewTask(url string) (*task.Download, error) {
 	resp, err := NewResponse(url)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func NewTask(url string) (*download.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	task := download.NewTask()
+	task := task.NewDownload()
 	for _, v := range list {
 		task.Append(v)
 	}

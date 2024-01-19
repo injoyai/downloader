@@ -9,12 +9,11 @@ import (
 	"github.com/injoyai/conv"
 	"github.com/injoyai/goutil/cache"
 	"github.com/injoyai/goutil/oss"
-	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/other/notice/voice"
+	"github.com/injoyai/goutil/task"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -67,6 +66,7 @@ func (this *gui) GetConfig() (*Config, error) {
 	if len(c.DownloadDir) == 0 {
 		c.DownloadDir = "./"
 	}
+	c.DownloadDir = strings.ReplaceAll(c.DownloadDir, "\\", "/")
 	if c.CoroutineNum == 0 {
 		c.CoroutineNum = 20
 	}
@@ -106,44 +106,46 @@ type Config struct {
 }
 
 // filename 新文件名称
-func (this *Config) filename(idx int, urlFilename string) string {
-	return conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName+"_"+strconv.Itoa(idx)+filepath.Ext(urlFilename))
+func (this *Config) filename(urlFilename string) string {
+	name := conv.SelectString(len(this.DownloadName) == 0, urlFilename, this.DownloadName)
+	filename := filepath.Join(this.DownloadDir, name)
+	return strings.ReplaceAll(filename, "\\", "/")
 }
 
 // Download 下载
-func (this *Config) Download(ctx context.Context, gui *gui, idx int, url string) (size int64, err error) {
+func (this *Config) Download(ctx context.Context, gui *gui, url string) (filename string, size int64, err error) {
 
 	logs.Debug("资源地址: ", url)
 
-	task, filename, err := getTask(url)
+	t, filename, err := getTask(url)
 	if err != nil {
-		return 0, err
+		return "", 0, err
 	}
 
-	logs.Debug("分片数量: ", task.Len())
+	logs.Debug("分片数量: ", t.Len())
 	logs.Debug("协程数量: ", this.CoroutineNum)
 	logs.Debug("重试次数: ", this.RetryNum)
 
-	filename = this.filename(idx, filename)
+	filename = this.filename(filename)
 	logs.Debug("文件名称: ", filename)
 
 	current := uint32(0)
 	start := time.Now()
-	task.SetLimit(this.CoroutineNum)
-	task.SetRetry(this.RetryNum)
-	task.SetDoneItem(func(ctx context.Context, resp *download.DoneItemResp) {
+	t.SetLimit(this.CoroutineNum)
+	t.SetRetry(this.RetryNum)
+	t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
 		value := atomic.AddUint32(&current, 1)
 		size += resp.GetSize()
-		rate := (float64(value) / float64(task.Len())) * 100
+		rate := (float64(value) / float64(t.Len())) * 100
 		gui.SetBar(rate)
 		speed, speedUnit := oss.Size(size)
 		speed /= time.Since(start).Seconds()
-		gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s", rate, speed, speedUnit))
+		gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s      %s", rate, speed, speedUnit, url))
 	})
-	resp := task.Download(ctx)
+	resp := t.Download(ctx)
 	_, err = resp.WriteToFile(filename)
 
-	return size, err
+	return filename, size, err
 }
 
 func New(configPath, driverPath, browserPath string) error {
@@ -186,11 +188,11 @@ func New(configPath, driverPath, browserPath string) error {
 			}
 
 			//开始下载,按顺序下载
-			for i, url := range urls {
+			for _, url := range urls {
 				gui.SetLog(url)
 				start := time.Now()
 				logs.Debug("----------------------------------------------------------------------------------------------------")
-				size, err := config.Download(ctx, gui, i, url)
+				filename, size, err := config.Download(ctx, gui, url)
 
 				spend := time.Now().Sub(start)
 				fSize, unit := oss.Size(size)
@@ -200,7 +202,8 @@ func New(configPath, driverPath, browserPath string) error {
 					"下载成功"+
 						", 大小:"+sizeStr+
 						", 用时:"+time.Now().Sub(start).String()+
-						", 速度:"+spendStr,
+						", 速度:"+spendStr+
+						"      文件位置:"+filename,
 					"下载失败: "+conv.String(err)))
 				logs.Debug("下载结果: ", conv.New(err).String("成功"))
 				logs.Debug("下载用时: ", spend.String())
@@ -211,7 +214,11 @@ func New(configPath, driverPath, browserPath string) error {
 
 			//播放下载完成提示音
 			if config.DoneVoice {
-				go voice.Speak("叮咚. 你的视频已下载结束")
+				select {
+				case <-ctx.Done():
+				default:
+					go voice.Speak("叮咚. 你的视频已下载结束")
+				}
 			}
 
 		})

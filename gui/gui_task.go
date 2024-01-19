@@ -4,15 +4,15 @@ import (
 	"context"
 	"github.com/injoyai/downloader/protocol/m3u8"
 	"github.com/injoyai/goutil/net/http"
-	"github.com/injoyai/goutil/other/download"
 	"github.com/injoyai/goutil/str"
+	"github.com/injoyai/goutil/task"
 	"net/url"
 	"path/filepath"
 	"strings"
 )
 
 // getTask 根据资源地址获取任务
-func getTask(u string) (task *download.Task, filename string, err error) {
+func getTask(u string) (task *task.Download, filename string, err error) {
 	base, err := url.Parse(u)
 	if err != nil {
 		return nil, "", err
@@ -33,8 +33,8 @@ func getTask(u string) (task *download.Task, filename string, err error) {
 	return task, filename + suffix, err
 }
 
-func NewMp4(url string) *download.Task {
-	task := download.NewTask()
+func NewMp4(url string) *task.Download {
+	task := task.NewDownload()
 	task.Append(GetBytes(func(ctx context.Context) ([]byte, error) {
 		return http.GetBytes(url)
 	}))
