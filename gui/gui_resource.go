@@ -53,7 +53,7 @@ func (this *base) Is(url string, title string, w selenium.WebDriver) (bool, erro
 	return true, nil
 }
 
-func (this *base) Name() string { return "" }
+func (this *base) Name() string { return "base" }
 
 func (this *base) Before(w selenium.WebDriver) error { return nil }
 

@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	Regexp = regexp.MustCompile(`(http:|https:)[a-zA-Z0-9\\/=_\-.:,%&]+\.(m3u8)([?a-zA-Z0-9/=_\-.*%&]+)`)
+	Regexp = regexp.MustCompile(`(http:|https:)[a-zA-Z0-9\\/=_\-.:,%&]+\.(m3u8)([?a-zA-Z0-9/=_\-.*%&]{0,})`)
 )
 
 func RegexpAll(s string) []string {
@@ -56,7 +56,6 @@ func (this *Config) deepFind(w Element) ([]string, error) {
 		return nil, err
 	}
 	for _, v := range iframes {
-		v.Text()
 		ls, err := this.deepFindElement(v)
 		if err != nil {
 			return nil, err
@@ -91,8 +90,6 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 		ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
 		p := i.Open(u)
 		p.WaitSec(3)
-
-		//oss.New("./page.txt", p.String())
 
 		title, _ := p.Title()
 
