@@ -113,45 +113,71 @@ func (this *Config) filename(urlFilename string) string {
 }
 
 // Download 下载
-func (this *Config) Download(ctx context.Context, gui *gui, url string) (filename string, size int64, err error) {
+func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 
-	logs.Debug("资源地址: ", url)
+	//	logs.Debug("资源地址: ", url)
 
-	t, filename, err := getTask(url)
+	tasks, filename, err := getTask(url, "")
 	if err != nil {
-		return "", 0, err
+		gui.SetLog("下载失败: " + conv.String(err))
+		return
 	}
 
-	logs.Debug("分片数量: ", t.Len())
-	logs.Debug("协程数量: ", this.CoroutineNum)
-	logs.Debug("重试次数: ", this.RetryNum)
+	for _, t := range tasks {
 
-	filename = this.filename(filename)
-	logs.Debug("文件名称: ", filename)
+		logs.Debug("----------------------------------------------------------------------------------------------------")
+		logs.Debug("分片数量: ", t.Len())
+		logs.Debug("协程数量: ", this.CoroutineNum)
+		logs.Debug("重试次数: ", this.RetryNum)
 
-	current := uint32(0)
-	start := time.Now()
-	t.SetLimit(this.CoroutineNum)
-	t.SetRetry(this.RetryNum)
-	t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
-		value := atomic.AddUint32(&current, 1)
-		size += resp.GetSize()
-		rate := (float64(value) / float64(t.Len())) * 100
-		gui.SetBar(rate)
-		speed, speedUnit := oss.Size(size)
-		speed /= time.Since(start).Seconds()
-		gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s      %s", rate, speed, speedUnit, url))
-	})
-	resp := t.Download(ctx)
-	_, err = resp.WriteToFile(filename)
+		filename = this.filename(filename)
+		logs.Debug("文件名称: ", filename)
 
-	return filename, size, err
+		current := uint32(0)
+		size := int64(0)
+		start := time.Now()
+		t.SetLimit(this.CoroutineNum)
+		t.SetRetry(this.RetryNum)
+		t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
+			value := atomic.AddUint32(&current, 1)
+			size += resp.GetSize()
+			rate := (float64(value) / float64(t.Len())) * 100
+			gui.SetBar(rate)
+			speed, speedUnit := oss.Size(size)
+			speed /= time.Since(start).Seconds()
+			gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s                                            %s", rate, speed, speedUnit, url))
+			if resp.Err != nil {
+				logs.Errf("分片(%d)下载失败: %s", resp.Index, resp.Err.Error())
+			}
+		})
+		resp := t.Download(ctx)
+		_, err = resp.WriteToFile(filename)
+
+		spend := time.Now().Sub(start)
+		fSize, unit := oss.Size(size)
+		sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
+		spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
+		gui.SetLog(conv.SelectString(err == nil,
+			"下载成功"+
+				", 大小:"+sizeStr+
+				", 用时:"+time.Now().Sub(start).String()+
+				", 速度:"+spendStr+
+				"      文件位置:"+filename,
+			"下载失败: "+conv.String(err)))
+		logs.Debug("下载结果: ", conv.New(err).String("成功"))
+		logs.Debug("下载用时: ", spend.String())
+		logs.Debug("文件大小: ", sizeStr)
+		logs.Debug("平均速度: ", spendStr)
+		logs.Debug("----------------------------------------------------------------------------------------------------")
+
+	}
+
 }
 
 func New(configPath, driverPath, browserPath string) error {
 	return lorca.Run(&lorca.Config{
 		Width:  600,
-		Height: 442,
+		Height: 488,
 		Html:   html,
 	}, func(app lorca.APP) error {
 
@@ -190,26 +216,7 @@ func New(configPath, driverPath, browserPath string) error {
 			//开始下载,按顺序下载
 			for _, url := range urls {
 				gui.SetLog(url)
-				start := time.Now()
-				logs.Debug("----------------------------------------------------------------------------------------------------")
-				filename, size, err := config.Download(ctx, gui, url)
-
-				spend := time.Now().Sub(start)
-				fSize, unit := oss.Size(size)
-				sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
-				spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
-				gui.SetLog(conv.SelectString(err == nil,
-					"下载成功"+
-						", 大小:"+sizeStr+
-						", 用时:"+time.Now().Sub(start).String()+
-						", 速度:"+spendStr+
-						"      文件位置:"+filename,
-					"下载失败: "+conv.String(err)))
-				logs.Debug("下载结果: ", conv.New(err).String("成功"))
-				logs.Debug("下载用时: ", spend.String())
-				logs.Debug("文件大小: ", sizeStr)
-				logs.Debug("平均速度: ", spendStr)
-				logs.Debug("----------------------------------------------------------------------------------------------------")
+				config.Download(ctx, gui, url)
 			}
 
 			//播放下载完成提示音

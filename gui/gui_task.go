@@ -1,48 +1,50 @@
 package gui
 
 import (
-	"context"
 	"github.com/injoyai/downloader/protocol/m3u8"
-	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/downloader/protocol/mp4"
 	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/goutil/task"
+	"github.com/injoyai/logs"
 	"net/url"
 	"path/filepath"
 	"strings"
 )
 
+const (
+	Mp4  = "mp4"
+	M3u8 = "m3u8"
+	Ts   = "ts"
+)
+
 // getTask 根据资源地址获取任务
-func getTask(u string) (task *task.Download, filename string, err error) {
+// @u,资源地址
+// @resourceType,资源类型m3u8或者mp4等,为空表示未知,需要自行判断
+func getTask(u string, resourceType string) (task []*task.Download, filename string, err error) {
 	base, err := url.Parse(u)
 	if err != nil {
+		logs.Err("网址解析错误: ", err)
 		return nil, "", err
 	}
 
-	filename = filepath.Base(base.Path)
-	filename = str.CropLast(filename, ".")
 	suffix := ""
-
 	switch true {
-	case strings.Contains(u, ".mp4"):
-		suffix = "mp4"
-		task = NewMp4(u)
-	default:
-		suffix = "ts"
+	case resourceType == M3u8 || (len(resourceType) == 0 && strings.HasSuffix(base.Path, M3u8)):
+		suffix = Ts
 		task, err = m3u8.NewTask(u)
+
+	case resourceType == Mp4 || (len(resourceType) == 0 && strings.HasSuffix(base.Path, Mp4)):
+		suffix = Mp4
+		task = mp4.NewTask(u)
+
+	default:
+		suffix = Ts
+		task, err = m3u8.NewTask(u)
+
 	}
+
+	logs.Debug("base.Path: ", base.Path)
+	filename = filepath.Base(strings.ReplaceAll(base.Path, "//", "/"))
+	filename = str.CropLast(filename, ".")
 	return task, filename + suffix, err
-}
-
-func NewMp4(url string) *task.Download {
-	task := task.NewDownload()
-	task.Append(GetBytes(func(ctx context.Context) ([]byte, error) {
-		return http.GetBytes(url)
-	}))
-	return task
-}
-
-type GetBytes func(ctx context.Context) ([]byte, error)
-
-func (this GetBytes) GetBytes(ctx context.Context) ([]byte, error) {
-	return this(ctx)
 }

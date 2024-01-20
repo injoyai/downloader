@@ -15,7 +15,7 @@ import (
 )
 
 func RegexpAll(s string) []string {
-	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:%&]+\.m3u8([\?a-zA-Z0-9/=_\-.]{0,})`).FindAllString(s, -1)
+	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:%&]+\.m3u8([?&a-zA-Z0-9/=_\-.]+)`).FindAllString(s, -1)
 }
 
 func NewResponse(uri string) (*Response, error) {
@@ -38,6 +38,7 @@ func Decode(uri string, bs []byte) (resp *Response, err error) {
 	}
 	resp = &Response{host: host, filename: filepath.Base(base.Path)}
 	nextItem := false
+	nextM3u8 := false
 	for _, s := range strings.Split(string(bs), "\n") {
 		switch true {
 		case nextItem:
@@ -49,8 +50,12 @@ func Decode(uri string, bs []byte) (resp *Response, err error) {
 				}
 				s = resp.host.ResolveReference(suffixURL).String()
 			}
-			resp.TS_URL = append(resp.TS_URL, s)
+			resp.TS_URL = append(resp.TS_URL, &Url{
+				url:    s,
+				isM3u8: nextM3u8,
+			})
 			nextItem = false
+			nextM3u8 = false
 		case strings.HasPrefix(s, "#EXT-X-KEY:"):
 			s = strings.TrimPrefix(s, "#EXT-X-KEY:")
 			//按,分割
@@ -89,6 +94,7 @@ func Decode(uri string, bs []byte) (resp *Response, err error) {
 		case strings.HasPrefix(s, "#EXTINF:") || strings.HasPrefix(s, "#EXT-X-STREAM-INF"):
 			//下一行是下载地址
 			nextItem = true
+			nextM3u8 = strings.HasPrefix(s, "#EXT-X-STREAM-INF")
 
 		case strings.HasPrefix(s, "#EXT-X-ENDLIST"):
 			//列表结束
@@ -101,12 +107,17 @@ func Decode(uri string, bs []byte) (resp *Response, err error) {
 type Response struct {
 	filename string   //文件名称
 	host     *url.URL //主机,前缀
-	TS_URL   []string //下载地址
+	TS_URL   []*Url   //下载地址
 	decrypt           //解密方式
 }
 
 func (this *Response) Filename() string {
 	return str.CropLast(this.filename, ".") + "ts"
+}
+
+type Url struct {
+	url    string //资源地址
+	isM3u8 bool   //是否是m3u8资源,否则是视频资源
 }
 
 type decrypt struct {
@@ -131,10 +142,11 @@ func (this *decrypt) Decrypt(bs []byte) (_ []byte, err error) {
 
  */
 
-func (this *Response) List() (list []*item, err error) {
+func (this *Response) List() (list [][]*item, err error) {
+	l := []*item(nil)
 	for _, v := range this.TS_URL {
-		if strings.HasSuffix(v, ".m3u8") {
-			resp, err := NewResponse(v)
+		if v.isM3u8 {
+			resp, err := NewResponse(v.url)
 			if err != nil {
 				return nil, err
 			}
@@ -145,15 +157,18 @@ func (this *Response) List() (list []*item, err error) {
 			list = append(list, ls...)
 			continue
 		}
-		list = append(list, &item{
+		l = append(l, &item{
 			decrypt: this.decrypt,
-			url:     v,
+			url:     v.url,
 		})
+	}
+	if len(l) > 0 {
+		list = append(list, l)
 	}
 	return
 }
 
-func NewTask(url string) (*task.Download, error) {
+func NewTask(url string) ([]*task.Download, error) {
 	resp, err := NewResponse(url)
 	if err != nil {
 		return nil, err
@@ -162,11 +177,15 @@ func NewTask(url string) (*task.Download, error) {
 	if err != nil {
 		return nil, err
 	}
-	task := task.NewDownload()
-	for _, v := range list {
-		task.Append(v)
+	tasks := []*task.Download(nil)
+	for _, ls := range list {
+		t := task.NewDownload()
+		for _, v := range ls {
+			t.Append(v)
+		}
+		tasks = append(tasks, t)
 	}
-	return task, nil
+	return tasks, nil
 }
 
 type item struct {
@@ -174,8 +193,8 @@ type item struct {
 	url string
 }
 
-func (this *item) GetBytes(ctx context.Context) ([]byte, error) {
-	bs, err := http.GetBytes(this.url)
+func (this *item) GetBytes(ctx context.Context, f func(p *http.Plan)) ([]byte, error) {
+	bs, err := http.GetBytesWithPlan(this.url, f)
 	if err != nil {
 		return nil, err
 	}

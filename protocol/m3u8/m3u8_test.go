@@ -22,3 +22,13 @@ info-content vod_content"><span>一颗陨石从天而降，汪汪队基地惨遭
 时，一位邪恶的科学家...<a href="javaScript:;" class="morecontent">展开</a></span><a href="javaScript:;" class="shrink" style="display: none;">收起</a></div></div></div></div><div class="video-player-handle"><div class="drop pc"><span class="btn-block-o handle-btn handle-more" title="拿起手机扫一`
 	t.Log(RegexpAll(s))
 }
+
+func TestDecode(t *testing.T) {
+	resp, err := NewResponse("https://ev-h.phncdn.com/hls/videos/202312/21/445172831/,1080P_4000K,720P_4000K,480P_2000K,240P_1000K,_445172831.mp4.urlset/index-f2-v1-a1.m3u8?validfrom=1705665007&validto=1705672207&ipa=42.98.37.213&hdl=-1&hash=tU3jn2Tq5MLcR%2FG494QO2XG133U%3D")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(len(resp.TS_URL))
+	t.Log(resp.TS_URL)
+}

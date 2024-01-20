@@ -3,48 +3,69 @@ package gui
 import (
 	"errors"
 	"fmt"
-	"github.com/injoyai/downloader/protocol/m3u8"
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/goutil/g"
-	"github.com/injoyai/goutil/net/http"
-	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/logs"
 	"github.com/tebeka/selenium"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
 
 var (
-	Regexp = regexp.MustCompile(`(http://|https://)[a-zA-Z0-9\\/=_\-.:%&]+\.(m3u8|mp4)([\?a-zA-Z0-9/=_\-.*%&]+)`)
+	Regexp = regexp.MustCompile(`(http:|https:)[a-zA-Z0-9\\/=_\-.:,%&]+\.(m3u8)([?a-zA-Z0-9/=_\-.*%&]+)`)
 )
 
 func RegexpAll(s string) []string {
 	return Regexp.FindAllString(s, -1)
 }
 
-func (this *Config) deepFind(p spider.Page) ([]string, error) {
-	urls := m3u8.RegexpAll(p.String())
-	//urls := RegexpAll(p.String())
-	iframes, err := p.FindElements(selenium.ByCSSSelector, "iframe")
+type Element interface {
+	PageSource() (string, error)
+	FindElements(by, value string) ([]selenium.WebElement, error)
+}
+
+func (this *Config) deepFindElement(e selenium.WebElement) ([]string, error) {
+	text, err := e.Text()
+	if err != nil {
+		return nil, err
+	}
+	urls := RegexpAll(text)
+	iframes, err := e.FindElements(selenium.ByCSSSelector, "iframe")
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range iframes {
-		if err := p.SwitchFrame(v); err != nil {
-			logs.Err(err)
-			return nil, err
-		}
-		ls, err := this.deepFind(p)
+		ls, err := this.deepFindElement(v)
 		if err != nil {
 			return nil, err
 		}
 		urls = append(urls, ls...)
-		if err := p.SwitchFrame(nil); err != nil {
-			logs.Err(err)
+	}
+	return urls, nil
+}
+
+func (this *Config) deepFind(w Element) ([]string, error) {
+	text, err := w.PageSource()
+	if err != nil {
+		return nil, err
+	}
+	urls := RegexpAll(text)
+	iframes, err := w.FindElements(selenium.ByCSSSelector, "iframe")
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range iframes {
+		v.Text()
+		ls, err := this.deepFindElement(v)
+		if err != nil {
 			return nil, err
 		}
+		urls = append(urls, ls...)
+	}
+	//去除转义符
+	for idx, v := range urls {
+		urls[idx] = strings.ReplaceAll(v, `\/`, "/")
 	}
 	return urls, nil
 }
@@ -62,6 +83,7 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 		return nil, errors.New("无效资源地址")
 	}
 
+	fmt.Printf("\n\n")
 	logs.Debug("驱动位置: ", driverPath)
 	logs.Debug("浏览器位置: ", browserPath)
 	logs.Debug("开始爬取: ", u)
@@ -70,54 +92,26 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 		p := i.Open(u)
 		p.WaitSec(3)
 
+		//oss.New("./page.txt", p.String())
+
 		title, _ := p.Title()
+
+		logs.Debug("网站标题: ", title)
+
+		//获取接口资源
+		resource, err := newResource(u, title, p.WebDriver)
+		logs.Debug("接口名称: ", resource.Name())
+
+		//前置操作
+		g.PanicErr(resource.Before(p.WebDriver))
 
 		//正则匹配数据,包括iframe
 		urls, err = this.deepFind(p)
 		g.PanicErr(err)
 
-		//去除转义符
-		for idx, v := range urls {
-			urls[idx] = strings.ReplaceAll(v, `\/`, "/")
-		}
-
-		switch {
-
-		case strings.Contains(u, "91pron"):
-
-			//特殊处理91pron
-			list := regexp.MustCompile(`VID=[0-9]+`).FindAllString(p.String(), -1)
-			for _, v := range list {
-				num := v[4:]
-				urls = append(urls, fmt.Sprintf("https://cdn77.91p49.com/m3u8/%s/%s.m3u8", num, num))
-			}
-
-		case strings.Contains(title, "51cg"):
-
-			//特殊处理51cg
-			for idx, v := range urls {
-				urls[idx] = v + "&v=3&time=0"
-			}
-
-		default:
-
-			//特殊处理网站,忘记是啥网站了
-			for i, v := range urls {
-				if strings.Contains(v, `//test.`) {
-					host := str.CropLast(v, "/")
-					bs, _ := http.GetBytes(host)
-					for _, s := range regexp.MustCompile(`>(.*?)\.m3u8<`).FindAllString(string(bs), -1) {
-						s = str.CropFirst(s, ">", false)
-						s = str.CropLast(s, "<", false)
-						if filepath.Base(v) != s {
-							urls[i] = host + s
-							break
-						}
-					}
-				}
-			}
-
-		}
+		// 后置操作
+		urls, err = resource.Deal(p.WebDriver, urls)
+		g.PanicErr(err)
 
 	}); err != nil {
 		return nil, err
@@ -137,7 +131,13 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 		}
 	}
 
-	logs.Debug("爬取成功: ", urls)
+	logs.Debug("爬取成功...")
+	for _, u := range urls {
+		logs.Debug("爬取地址: ", u)
+	}
+
+	//urls = []string{}
+	//return
 
 	if len(urls) == 0 {
 		return nil, errors.New("没有找到资源")

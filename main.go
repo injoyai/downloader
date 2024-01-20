@@ -11,7 +11,7 @@ import (
 var Debug = "true"
 
 func init() {
-	logs.SetLevel(conv.Select(Debug == "true", logs.LevelAll, logs.LevelNone).(logs.Level))
+	logs.SetLevel(conv.Select(Debug == "true", logs.LevelDebug, logs.LevelNone).(logs.Level))
 }
 
 // http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8
