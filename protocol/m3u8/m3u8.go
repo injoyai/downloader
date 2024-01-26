@@ -14,8 +14,12 @@ import (
 	"strings"
 )
 
+func Regexp() *regexp.Regexp {
+	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:%&]+\.m3u8([?&a-zA-Z0-9/=_\-.]+)`)
+}
+
 func RegexpAll(s string) []string {
-	return regexp.MustCompile(`(http)[a-zA-Z0-9\\/=_\-.:%&]+\.m3u8([?&a-zA-Z0-9/=_\-.]+)`).FindAllString(s, -1)
+	return Regexp().FindAllString(s, -1)
 }
 
 func NewResponse(uri string) (*Response, error) {
