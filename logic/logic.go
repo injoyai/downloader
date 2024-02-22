@@ -21,11 +21,11 @@ type (
 	HandlerDone func(ctx context.Context, name, source string, fn HandlerItem) error
 )
 
-func Download(ctx context.Context, dir, source string, f1 HandlerInfo, fn HandlerItem) error {
-	return downloadM3u8(ctx, dir, source, f1, fn)
+func Download(ctx context.Context, source string, f1 HandlerInfo, fn HandlerItem) error {
+	return downloadM3u8(ctx, source, f1, fn)
 }
 
-func downloadM3u8(ctx context.Context, dir, source string, f1 HandlerInfo, fn HandlerItem) error {
+func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn HandlerItem) error {
 
 	resp, err := m3u8.NewResponse(source)
 	if err != nil {
@@ -41,45 +41,55 @@ func downloadM3u8(ctx context.Context, dir, source string, f1 HandlerInfo, fn Ha
 		return nil
 	}
 
-	cacheDir := filepath.Join(dir, resp.Name())
-
 	for _, list := range lists {
+
+		//获取配置
+		config := f1(&Info{
+			Total:   int64(len(lists[0])),
+			Current: 0,
+			Name:    resp.Name(),
+			Config:  DefaultConfig,
+		})
+
+		//分片目录
+		cacheDir := filepath.Join(config.Dir, config.Name)
 
 		//查看已经下载的分片
 		doneName := map[string]bool{}
-		oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) bool {
-			doneName[info.Name()] = true
-			return true
+		oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
+			if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
+				doneName[info.Name()] = true
+			}
+			return true, nil
 		})
-
-		config := &Info{
-			Total:   int64(len(lists[0])),
-			Current: int64(len(doneName)),
-			Name:    resp.Name(),
-			Config:  DefaultConfig,
-		}
-		config = f1(config)
 
 		//新建下载任务
 		t := task.NewDownload()
 		t.SetCoroutine(config.Coroutine)
 		t.SetRetry(config.Retry)
 		t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
-			if resp.Err != nil {
-				//保存分片到文件夹
-				g.Retry(func() error { return oss.New(fmt.Sprintf("%04d"+config.Suffix, resp.Index), resp.Bytes) }, 3)
+			if resp.Err == nil {
+				//保存分片到文件夹,5位长度,最大99999分片,大于99999视频会乱序
+				filename := fmt.Sprintf("%05d"+config.Suffix, resp.Index)
+				filename = filepath.Join(cacheDir, filename)
+				g.Retry(func() error { return oss.New(filename, resp.Bytes) }, 3)
 			}
 			fn(ctx, resp)
 		})
 		for i, v := range list {
 			if doneName[strconv.Itoa(i)] {
 				//过滤已经下载过的分片
+				fn(ctx, &task.DownloadItemResp{
+					Index: i,
+					Err:   nil,
+				})
 				continue
 			}
 			//继续下载没有下载过的分片
 			t.Append(v)
 		}
 
+		//新建任务
 		doneResp := t.Download(ctx)
 		if doneResp.Err != nil {
 			return doneResp.Err
@@ -90,21 +100,23 @@ func downloadM3u8(ctx context.Context, dir, source string, f1 HandlerInfo, fn Ha
 			return err
 		}
 		g.Retry(func() error {
-			return oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) bool {
+			return oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
 				if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
 					f, err := os.Open(filepath.Join(cacheDir, info.Name()))
 					if err != nil {
-						return false
+						return false, err
 					}
 					defer f.Close()
 					_, err = io.Copy(totalFile, f)
-					return err == nil
+					return err == nil, err
 				}
-				return true
+				return true, nil
 			})
 		}, 3)
-		//删除文件夹
+		//删除文件夹和分片视频
 		oss.DelDir(cacheDir)
+
+		break
 
 	}
 

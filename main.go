@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/injoyai/conv"
 	"github.com/injoyai/downloader/global"
-	"github.com/injoyai/downloader/gui"
+	"github.com/injoyai/downloader/gui/v2"
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/logs"
 )

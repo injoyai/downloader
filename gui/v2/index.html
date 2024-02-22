@@ -1,57 +1,189 @@
-<!doctype html>
-<html>
-<meta http-equiv="Content-Type" content="text/html;; charset=utf-8" />
+<!DOCTYPE html>
+<html lang="zh-CN">
+
 <head>
-    <title>在线视频下载</title>
-    <link rel="shortcut icon" href="./ico.png" >
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>资源下载页面</title>
+    <link rel="shortcut icon" href="./ico.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #topSection {
+            flex-grow: 1;
+        }
+
+        table {
+            border: 1px solid #ddd;
+            width: 100%;
+            height: 20%;
+            border-collapse: collapse;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 20px;
+            text-align: left;
+        }
+
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .progress-container {
+            display: none;
+        }
+
+        #downloadLog {
+            width: 100%;
+        }
+
+        #settingsModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #f1f1f1;
+            padding: 20px;
+            border: 1px solid #ddd;
+            z-index: 1;
+            width: 270px;
+        }
+
+        #bottomSection {
+            height: 300px;
+            border: 1px solid #ddd;
+            overflow: hidden;
+        }
+
+        #embeddedBrowser {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
 </head>
 
 <body>
 
-<table border="1px" width="100%" height="80%" cellpadding="6px" cellspacing="0">
-    <tr>
-        <td>下载地址</td>
-        <td><textarea id="download_addr" rows="3" cols="60" value=""></textarea></td>
-    </tr>
-    <tr>
-        <td>保存路径</td>
-        <td><input id="download_dir" type="text" placeholder="可选,例./" value="./"></input></td>
-    </tr>
-    <tr>
-        <td>保存名称</td>
-        <td><input id="download_name" type="text" placeholder="可选,例xx.ts" value=""></input></td>
-    </tr>
-    <tr>
-        <td>开启代理</td>
-        <td><input id="proxy_use" type="checkbox"></input></td>
-    </tr>
-    <tr>
-        <td>代理地址</td>
-        <td><input id="proxy_addr" type="text" value=""></input></td>
-    </tr>
-    <tr>
-        <td>完成声音</td>
-        <td><input id="done_voice" type="checkbox"></input></td>
-    </tr>
-    <tr>
-        <td>下载进度</td>
-        <td><progress id="bar" value="0" max="100"></progress></td>
-    </tr>
-    <tr>
-        <td><input id="download" type="button" onclick="run()" readonly="true" value="开始下载"></input></td>
-        <td><textarea id="log" rows="8" cols="60" readonly="true" value=""></textarea></td>
-    </tr>
+<div id="topSection">
+    <button onclick="openSettings()">设置</button>
+    <button id="open_browser" onclick="openBrowser()" value="close">打开浏览器</button>
 
-</table>
+    <table id="resourceTable">
+        <tr>
+            <td>信息</td>
+            <td>操作</td>
+        </tr>
+    </table>
 
+    <div id="downloadLog">
+        <h2>日志信息</h2>
+        <textarea id="log" rows="8" cols="80%" readonly="true"></textarea>
+    </div>
+</div>
 
+<div id="settingsModal">
+    <h2>参数设置</h2>
+    <label for="download_dir">下载位置：</label> <input id="download_dir" value="./"><br>
+    <label for="proxy_enable">开启代理：</label> <input id="proxy_enable" type="checkbox"><br>
+    <label for="proxy_address">代理地址：</label> <input id="proxy_address" type="text" value="127.0.0.1:1081"><br>
+    <label for="notice_enable">完成通知：</label> <input id="notice_enable" type="checkbox" checked="true"><br>
+    <label for="notice_text">通知内容：</label> <input id="notice_text" type="text" value="叮咚. 你的视频已下载结束"><br>
+    <label for="retry_num">重试次数：</label> <input id="retry_num" type="number" value="3" min="1"><br>
+    <label for="coroutine_num">协程数量：</label> <input id="coroutine_num" type="number" value="20" min="1"><br>
+    <br>
+    <button onclick="applySettings()">确定</button>
+    <button onclick="closeSettings()">关闭</button>
+</div>
 
+<script>
+    function startDownload(resourceNumber) {
+        var logTextarea = document.getElementById('log');
+        var progressContainer = document.getElementById('progress-container-' + resourceNumber);
+        var progressBar = document.getElementById('progress-' + resourceNumber);
+        var resourceName = document.getElementById('resourceName-' + resourceNumber);
+        var resourceAddress = document.getElementById('resourceAddress-' + resourceNumber);
 
+        logTextarea.value += '开始下载资源' + resourceNumber + '\n';
 
+        // 显示进度条容器，隐藏资源地址
+        progressContainer.style.display = 'block';
+        resourceAddress.style.display = 'none';
 
+        // 模拟下载，每秒增加10%进度
+        var progress = 0;
+        var downloadInterval = setInterval(function () {
+            if (progress < 100) {
+                progress += 10;
+                progressBar.value = progress;
+            } else {
+                clearInterval(downloadInterval);
+                logTextarea.value += '资源' + resourceNumber + '下载完成！\n';
+                // 显示资源地址，隐藏进度条容器
+                resourceAddress.style.display = 'block';
+                progressContainer.style.display = 'none';
+            }
+        }, 1000);
+    }
+
+    // 加载资源的函数
+    function loadResources() {
+        // 定义资源信息数组
+        var resources = [
+            {
+                name: "资源1",
+                address: "https://www.example.com/resource1",
+            },
+            {
+                name: "资源2",
+                address: "https://www.example.com/resource2",
+            },
+            {
+                name: "资源3",
+                address: "https://www.example.com/resource3",
+            },
+        ];
+
+        // 获取表格元素
+        var resourceTable = document.getElementById('resourceTable');
+
+        // 遍历资源数组，动态生成 HTML 并添加到表格中
+        resources.forEach(function (resource, index) {
+            var row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <strong id="resourceName-${index + 1}">${resource.name}</strong><br>
+                    <span id="resourceAddress-${index + 1}">${resource.address}</span>
+                    <div id="progress-container-${index + 1}" class="progress-container">
+                        <progress id="progress-${index + 1}" value="0" max="100"></progress>
+                    </div>
+                </td>
+                <td>
+                    <button onclick="startDownload(${index + 1})">下载</button>
+                </td>
+            `;
+            resourceTable.appendChild(row);
+        });
+    }
+
+    // 页面加载完成后调用加载资源的函数
+    document.addEventListener('DOMContentLoaded', function () {
+        loadResources();
+    });
+</script>
 
 </body>
-
-
 
 </html>

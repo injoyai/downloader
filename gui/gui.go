@@ -22,6 +22,9 @@ import (
 //go:embed index.html
 var html string
 
+//go:embed index2.html
+var html2 string
+
 type gui struct {
 	lorca.APP
 	*cache.File
@@ -177,9 +180,9 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 
 func New(configPath, driverPath, browserPath string) error {
 	return lorca.Run(&lorca.Config{
-		Width:  600,
-		Height: 488,
-		Html:   html,
+		Width:  610,
+		Height: 500,
+		Html:   html2,
 	}, func(app lorca.APP) error {
 
 		gui := &gui{
@@ -230,6 +233,9 @@ func New(configPath, driverPath, browserPath string) error {
 			}
 
 		})
+
+		//绑定打开浏览器函数
+		gui.Bind("openBrowser", bindOpenBrowser)
 
 		return gui.Bind("run", func() {
 			running := gui.Get("download") == "开始下载"

@@ -1,47 +1,97 @@
-<!doctype html>
-<html>
-<meta http-equiv="Content-Type" content="text/html;; charset=utf-8" />
+<!DOCTYPE html>
+<html lang="zh-CN">
+
 <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>在线视频下载</title>
-    <link rel="shortcut icon" href="./ico.png" >
+    <link rel="shortcut icon" href="./ico.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        table {
+            border: 1px solid #ddd;
+            width: 100%;
+            height: 80%;
+            border-collapse: collapse;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        textarea, input, button, progress {
+            margin: 5px;
+        }
+
+        #settingsModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #f1f1f1;
+            padding: 20px;
+            border: 1px solid #ddd;
+            z-index: 1;
+        }
+    </style>
 </head>
 
 <body>
 
-<table border="1px" width="100%" height="80%" cellpadding="6px" cellspacing="0">
+
+
+<table>
+
+
+
+    <tr>
+        <td>资源列表</td>
+        <td> <ul id="resource_list">
+            <!-- 每个资源的列表项 -->
+            <li>
+                <span>资源1：</span>
+                <progress id="resource1_progress" value="0" max="100"></progress>
+                <button onclick="downloadResource(1)">下载</button>
+            </li>
+            <li>
+                <span>资源2：</span>
+                <progress id="resource2_progress" value="0" max="100"></progress>
+                <button onclick="downloadResource(2)">下载</button>
+            </li>
+            <!-- 添加更多资源项 -->
+        </ul></td>
+    </tr>
+
     <tr>
         <td>下载地址</td>
         <td><textarea id="download_addr" rows="3" cols="60" value=""></textarea></td>
     </tr>
     <tr>
-        <td>保存路径</td>
-        <td><input id="download_dir" type="text" placeholder="可选,例./" value="./"></input></td>
-    </tr>
-    <tr>
-        <td>保存名称</td>
-        <td><input id="download_name" type="text" placeholder="可选,例xx.ts" value=""></input></td>
-    </tr>
-    <tr>
-        <td>开启代理</td>
-        <td><input id="proxy_use" type="checkbox"></input></td>
-    </tr>
-    <tr>
-        <td>代理地址</td>
-        <td><input id="proxy_addr" type="text" value=""></input></td>
-    </tr>
-    <tr>
-        <td>完成声音</td>
-        <td><input id="done_voice" type="checkbox"></input></td>
-    </tr>
-    <tr>
         <td>下载进度</td>
-        <td><progress id="bar" value="0" max="100"></progress></td>
+        <td>
+            <progress id="bar" value="0" max="100"></progress><label >    0/0    0KB/s</label>
+        </td>
+
     </tr>
     <tr>
-        <td><input id="download" type="button" onclick="run()" readonly="true" value="开始下载"></input></td>
+        <td>日志信息</td>
         <td><textarea id="log" rows="8" cols="60" readonly="true" value=""></textarea></td>
     </tr>
+    <tr>
+        <td>
 
+        <input id="browser" type="button" onclick="browser()" readonly="true" value="打开浏览器"></input>
+        </td>
+        <td><input id="setting" type="button" onclick="setting()" readonly="true" value="设置"></input> </td>
+    </tr>
 </table>
 
 
@@ -50,8 +100,65 @@
 
 
 
+<div id="settingsModal">
+    <h2>设置</h2>
+    <label for="save_dir">保存路径：</label>  <input  id="save_dir" type="file" directory="" nwdirectory=""><br>
+    <label for="proxy_switch">开启代理：</label> <input id="proxy_switch" type="checkbox"><br>
+    <label for="proxy_address">代理地址：</label> <input id="proxy_address" type="text"><br>
+    <label for="notification_sound">完成提示音：</label> <input id="notification_sound" type="checkbox"><br>
+    <label for="notification_sound_content">提示音内容：</label> <input id="notification_sound_content" type="text"><br>
+    <label for="retry_count">重试次数：</label> <input id="retry_count" type="number" value="3" min="1"><br>
+    <label for="coroutine_count">协程数量：</label> <input id="coroutine_count" type="number" value="5" min="1"><br>
+    <button onclick="applySettings()">设置</button>
+    <button onclick="closeSettings()">关闭</button>
+</div>
+
+<script>
+    // 模拟资源下载的函数，传入资源编号
+    function downloadResource(resourceNumber) {
+        // TODO: 实际下载逻辑
+        // 在下载过程中更新对应资源的进度条
+        var progressBar = document.getElementById('resource' + resourceNumber + '_progress');
+        var downloadInterval = setInterval(function () {
+            if (progressBar.value < progressBar.max) {
+                progressBar.value += 10;
+            } else {
+                clearInterval(downloadInterval);
+                alert('资源' + resourceNumber + '下载完成！');
+            }
+        }, 1000);
+    }
+
+    // 打开设置框
+    function openSettings() {
+        document.getElementById('settingsModal').style.display = 'block';
+    }
+
+    // 关闭设置框
+    function closeSettings() {
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    // 应用设置
+    function applySettings() {
+        // 获取设置的值
+        var proxySwitch = document.getElementById('proxy_switch').checked;
+        var proxyAddress = document.getElementById('proxy_address').value;
+        var notificationSound = document.getElementById('notification_sound').checked;
+        var retryCount = document.getElementById('retry_count').value;
+        var coroutineCount = document.getElementById('coroutine_count').value;
+
+        // TODO: 根据设置应用逻辑
+
+        // 示例：应用设置后替换下载地址
+        var downloadAddrTextarea = document.getElementById('download_addr');
+        downloadAddrTextarea.value = "新的下载地址";
+
+        alert('设置已应用！');
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+</script>
+
 </body>
-
-
 
 </html>

@@ -5,7 +5,7 @@ import (
 	"github.com/injoyai/goutil/net/http"
 	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/logs"
-	"github.com/tebeka/selenium"
+	"github.com/injoyai/selenium"
 	"path/filepath"
 	"regexp"
 	"strings"

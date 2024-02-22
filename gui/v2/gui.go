@@ -6,16 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"github.com/injoyai/base/chans"
+	"github.com/injoyai/base/maps"
 	"github.com/injoyai/conv"
 	"github.com/injoyai/downloader/protocol/m3u8"
+	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/goutil/cache"
 	"github.com/injoyai/goutil/oss"
-	"github.com/injoyai/goutil/spider"
 	"github.com/injoyai/goutil/task"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -38,7 +40,7 @@ func (this *gui) Get(key string) string {
 	return this.APP.GetValueByID(key)
 }
 
-func (this *gui) SetLog(value string) {
+func (this *gui) SetLog(value interface{}) {
 	this.Set("log", value)
 }
 
@@ -56,15 +58,22 @@ func (this *gui) SetConfig() {
 
 }
 
-// GetConfig 获取配置,并保存
-func (this *gui) GetConfig() (*Config, error) {
+// openSettings 打开设置
+func (this *gui) openSettings() {
+	this.Eval("document.getElementById('settingsModal').style.display = 'block';")
+}
+
+// applySettings 确认设备
+func (this *gui) applySettings() {
 	c := &Config{
-		DownloadAddr: strings.TrimSpace(conv.String(this.APP.GetValueByID("download_addr"))),
 		DownloadDir:  conv.String(this.APP.GetValueByID("download_dir")),
 		DownloadName: conv.String(this.APP.GetValueByID("download_name")),
-		EnableProxy:  this.APP.Eval("document.getElementById('proxy_use').checked").Bool(),
+		ProxyEnable:  this.APP.Eval("document.getElementById('proxy_use').checked").Bool(),
 		ProxyAddr:    conv.String(this.APP.GetValueByID("proxy_addr")),
-		DoneVoice:    this.APP.Eval("document.getElementById('done_voice').checked").Bool(),
+		NoticeEnable: this.APP.Eval("document.getElementById('notice_enable').checked").Bool(),
+		NoticeText:   this.APP.GetValueByID("notice_text"),
+		RetryNum:     conv.Uint(this.APP.GetValueByID("retry_num")),
+		CoroutineNum: conv.Uint(this.APP.GetValueByID("coroutine_num")),
 	}
 	if len(c.DownloadDir) == 0 {
 		c.DownloadDir = "./"
@@ -77,80 +86,141 @@ func (this *gui) GetConfig() (*Config, error) {
 		c.RetryNum = 3
 	}
 	oss.New(c.DownloadDir, 0777)
-	if err := this.saveConfig(c); err != nil {
-		return nil, err
-	}
-	if len(c.DownloadAddr) == 0 {
-		return nil, errors.New("无效下载地址")
-	}
-	this.SetLog(c.DownloadAddr)
-	return c, nil
+	this.File.Set("download_dir", c.DownloadDir)
+	this.File.Set("proxy_enable", c.ProxyEnable)
+	this.File.Set("proxy_addr", c.ProxyAddr)
+	this.File.Set("notice_enable", c.NoticeEnable)
+	this.File.Set("notice_text", c.NoticeText)
+	this.File.Set("retry_num", c.RetryNum)
+	this.File.Set("coroutine_num", c.CoroutineNum)
+	this.File.Cover()
+	this.closeSettings()
 }
 
-// saveConfig 保存配置
-func (this *gui) saveConfig(cfg *Config) error {
-	this.File.Set("download_addr", cfg.DownloadAddr)
-	this.File.Set("download_dir", cfg.DownloadDir)
-	this.File.Set("proxy_addr", cfg.ProxyAddr)
-	this.File.Set("done_voice", cfg.DoneVoice)
-	return this.File.Cover()
+// closeSettings 关闭设置
+func (this *gui) closeSettings() {
+	this.Eval("document.getElementById('settingsModal').style.display = 'none';")
+}
+
+func (this *gui) loadResources() {
+
 }
 
 func (this *gui) findUrl(ctx context.Context) {
 
 	logs.PrintErr(
 		spider.New(
-			this.driverPath,
 			this.browserPath,
+			this.driverPath,
 			func(e *spider.Entity) {
-
+				e.SetRetry(1)
 			},
 		).Run(func(w *spider.WebDriver) error {
 
-			timer := time.NewTimer(2 * time.Second)
-			for {
-				timer.Reset(2 * time.Second)
-				select {
-				case <-ctx.Done():
-					return errors.New("关闭浏览器")
-				case <-timer.C:
+			logs.Debug("打开浏览器")
+			w.Open("https://www.google.com")
 
-					//获取hls地址
-					s, err := w.Text()
-					logs.PrintErr(err)
-					m3u8List := m3u8.RegexpAll(s)
-					for i, v := range m3u8List {
-						m3u8List[i] = strings.ReplaceAll(v, "/", "\\")
-					}
-
-					hrefs, err := w.FindTagAttributes("a.href")
-					logs.PrintErr(err)
-					for _, v := range hrefs {
-						if m3u8.Regexp().MatchString(v) {
-							m3u8List = append(m3u8List, v)
-						}
-					}
-
-					//显示到GUI上
-					_ = m3u8List
-
-				}
+			handler, err := w.CurrentWindowHandle()
+			if err != nil {
+				return err
 			}
+			handlerMap := maps.NewSafe()
+			handlerMap.Set(handler, true)
 
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			go this.findUrl2(ctx, wg, handlerMap, w, time.Second*2)
+			wg.Wait()
+
+			return nil
 		}))
 
 }
 
+func (this *gui) findUrl2(ctx context.Context, wg *sync.WaitGroup, handlerMap *maps.Safe, w *spider.WebDriver, interval time.Duration) error {
+	defer wg.Done()
+
+	timer := time.NewTimer(interval)
+	for {
+		timer.Reset(interval)
+		select {
+		case <-ctx.Done():
+			logs.Debug("关闭标签页")
+			return errors.New("关闭标签页")
+		case <-timer.C:
+
+			logs.Debug("寻找资源")
+
+			logs.Debug(w.CurrentWindowHandle())
+			logs.Debug(w.SessionID())
+
+			handlerList, err := w.WindowHandles()
+			if err != nil {
+				return err
+			}
+
+			for _, handler := range handlerList {
+				//if i != len(handlerList)-1 {
+				//	continue
+				//}
+				handlerMap.GetOrSetByHandler(handler, func() (interface{}, error) {
+					logs.Debug(handler)
+					w2 := w.NewSeesion(handler)
+					//w2.SwitchWindow()
+					wg.Add(1)
+					go this.findUrl2(ctx, wg, handlerMap, &spider.WebDriver{RemoteWD: w2}, interval)
+					return time.Now(), nil
+				})
+			}
+
+			title, err := w.Title()
+			if err != nil {
+				return err
+			}
+			logs.Debug("标题: ", title)
+
+			//获取hls地址
+			s, err := w.Text()
+			if err != nil {
+				return err
+			}
+			m3u8List := m3u8.RegexpAll(s)
+			for i, v := range m3u8List {
+				m3u8List[i] = strings.ReplaceAll(v, "\\/", "/")
+			}
+
+			hrefs, err := w.FindTagAttributes("a.href")
+			if err != nil {
+				return err
+			}
+			for _, v := range hrefs {
+				if m3u8.Regexp().MatchString(v) {
+					m3u8List = append(m3u8List, v)
+				}
+			}
+
+			for _, v := range m3u8List {
+				logs.Debug(v)
+			}
+
+			//显示到GUI上
+			_ = m3u8List
+			this.SetLog(strings.Join(m3u8List, "\n"))
+
+		}
+	}
+}
+
 // Config 配置字段
 type Config struct {
-	DownloadAddr string //资源地址
 	DownloadDir  string //下载目录
 	DownloadName string //下载名称
-	EnableProxy  bool   //启用代理
+	ProxyEnable  bool   //启用代理
 	ProxyAddr    string //代理地址
-	DoneVoice    bool   //下载完成声音
-	CoroutineNum uint   //协程数量
+	NoticeEnable bool   //下载完成声音
+	NoticeText   string //完成提示内容
 	RetryNum     uint   //重试次数
+	CoroutineNum uint   //协程数量
 }
 
 // filename 新文件名称
@@ -224,11 +294,13 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 
 func New(configPath, driverPath, browserPath string) error {
 	return lorca.Run(&lorca.Config{
-		Width:  600,
-		Height: 488,
+		Width:  610,
+		Height: 500,
 		Html:   html,
 	}, func(app lorca.APP) error {
 
+		logs.Debug(driverPath)
+		logs.Debug(browserPath)
 		gui := &gui{
 			APP:         app,
 			File:        cache.NewFile(configPath),
@@ -239,11 +311,16 @@ func New(configPath, driverPath, browserPath string) error {
 		//设置配置信息到gui
 		gui.SetConfig()
 
+		gui.Bind("openSettings", gui.openSettings)
+		gui.Bind("applySettings", gui.applySettings)
+		gui.Bind("closeSettings", gui.closeSettings)
+
 		enable := chans.NewRerun(gui.findUrl)
 
-		return gui.Bind("open_browser", func() {
-			opened := gui.Get("open_browser") == "打开浏览器"
-			gui.Set("open_browser", conv.SelectString(opened, "关闭浏览器", "打开浏览器"))
+		return gui.Bind("openBrowser", func() {
+			logs.Debug(gui.Get("open_browser"))
+			opened := gui.Get("open_browser") == "close"
+			gui.Set("open_browser", conv.SelectString(opened, "close", "open"))
 			enable.Enable(opened)
 		})
 

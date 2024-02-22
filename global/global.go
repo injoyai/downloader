@@ -3,7 +3,6 @@ package global
 import (
 	_ "embed"
 	"github.com/injoyai/goutil/oss"
-	"path/filepath"
 )
 
 var (
@@ -14,10 +13,10 @@ var (
 	BrowserDir = oss.UserInjoyDir("downloader/browser")
 
 	// ChromePath 浏览器路径
-	ChromePath = filepath.Join(BrowserDir, "chrome/chrome.exe")
+	ChromePath = oss.UserInjoyDir("/browser/chrome/chrome.exe")
 
 	// DriverPath 浏览器驱动路径
-	DriverPath = filepath.Join(BrowserDir, "chrome/chromedriver.exe")
+	DriverPath = oss.UserInjoyDir("/browser/chrome/chromedriver.exe")
 
 	// ConfigPath 配置目录
 	ConfigPath = oss.UserInjoyDir("downloader/config/config.json")

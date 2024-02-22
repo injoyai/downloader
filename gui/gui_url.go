@@ -6,7 +6,7 @@ import (
 	"github.com/injoyai/downloader/spider"
 	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/logs"
-	"github.com/tebeka/selenium"
+	"github.com/injoyai/selenium"
 	"net/url"
 	"regexp"
 	"strings"
@@ -87,28 +87,34 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 	logs.Debug("浏览器位置: ", browserPath)
 	logs.Debug("开始爬取: ", u)
 	if err := spider.New(driverPath, browserPath).
-		ShowWindow(false).ShowImg(false).Run(func(i spider.IPage) {
-		p := i.Open(u)
-		p.WaitSec(3)
+		ShowWindow(false).ShowImg(false).Run(func(w *spider.WebDriver) (err error) {
 
-		title, _ := p.Title()
+		g.Recover(&err)
+
+		g.PanicErr(w.Open(u))
+		w.WaitSec(3)
+
+		title, err := w.Text()
+		g.PanicErr(err)
 
 		logs.Debug("网站标题: ", title)
 
 		//获取接口资源
-		resource, err := newResource(u, title, p.WebDriver)
+		resource, err := newResource(u, title, w.WebDriver)
 		logs.Debug("接口名称: ", resource.Name())
 
 		//前置操作
-		g.PanicErr(resource.Before(p.WebDriver))
+		g.PanicErr(resource.Before(w.WebDriver))
 
 		//正则匹配数据,包括iframe
-		urls, err = this.deepFind(p)
+		urls, err = this.deepFind(w.WebDriver)
 		g.PanicErr(err)
 
 		// 后置操作
-		urls, err = resource.Deal(p.WebDriver, urls)
+		urls, err = resource.Deal(w.WebDriver, urls)
 		g.PanicErr(err)
+
+		return nil
 
 	}); err != nil {
 		return nil, err
