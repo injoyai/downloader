@@ -136,7 +136,7 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 		current := uint32(0)
 		size := int64(0)
 		start := time.Now()
-		t.SetLimit(this.CoroutineNum)
+		t.SetCoroutine(this.CoroutineNum)
 		t.SetRetry(this.RetryNum)
 		t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
 			value := atomic.AddUint32(&current, 1)
@@ -151,7 +151,8 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 			}
 		})
 		resp := t.Download(ctx)
-		_, err = resp.WriteToFile(filename)
+		_ = resp
+		//_, err = resp.WriteToFile(filename)
 
 		spend := time.Now().Sub(start)
 		fSize, unit := oss.Size(size)

@@ -115,6 +115,10 @@ type Response struct {
 	decrypt           //解密方式
 }
 
+func (this *Response) Name() string {
+	return str.CropLast(this.filename, ".", false)
+}
+
 func (this *Response) Filename() string {
 	return str.CropLast(this.filename, ".") + "ts"
 }
