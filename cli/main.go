@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/injoyai/base/maps"
 	"github.com/injoyai/downloader/logic"
 	"github.com/injoyai/goutil/oss"
@@ -32,6 +33,7 @@ func main() {
 			start := time.Now()
 			cache := maps.NewValue(0, time.Millisecond)
 			b := bar.NewWithContext(ctx, 100)
+			b.SetColor(color.BgCyan)
 			b.SetFormatter(func(e *bar.Format) string {
 				return fmt.Sprintf("\r%s  %s  %s",
 					e.Bar,

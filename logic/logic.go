@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"github.com/injoyai/downloader/protocol/m3u8"
 	"github.com/injoyai/goutil/g"
+	"github.com/injoyai/goutil/net/http"
+	"github.com/injoyai/goutil/notice"
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/task"
+	"github.com/injoyai/logs"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -51,6 +53,11 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 			Config:  DefaultConfig,
 		})
 
+		//设置代理
+		if config.ProxyEnable {
+			http.SetProxy(config.Proxy)
+		}
+
 		//分片目录
 		cacheDir := filepath.Join(config.Dir, config.Name)
 
@@ -59,6 +66,7 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 		oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
 			if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
 				doneName[info.Name()] = true
+				logs.Debug(info.Name())
 			}
 			return true, nil
 		})
@@ -77,13 +85,13 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 			fn(ctx, resp)
 		})
 		for i, v := range list {
-			if doneName[strconv.Itoa(i)] {
+			filename := fmt.Sprintf("%05d"+config.Suffix, i)
+			if doneName[filename] {
 				//过滤已经下载过的分片
-				fn(ctx, &task.DownloadItemResp{
-					Index: i,
-					Err:   nil,
-				})
-				continue
+				//fn(ctx, &task.DownloadItemResp{
+				//	Index: i,
+				//})
+				//continue
 			}
 			//继续下载没有下载过的分片
 			t.Append(v)
@@ -99,6 +107,8 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 		if err != nil {
 			return err
 		}
+
+		//合并视频
 		g.Retry(func() error {
 			return oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
 				if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
@@ -113,8 +123,22 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 				return true, nil
 			})
 		}, 3)
+
 		//删除文件夹和分片视频
 		oss.DelDir(cacheDir)
+
+		//提示消息
+		if config.NoticeEnable {
+			notice.NewWindows().Publish(&notice.Message{
+				Title:   "下载完成",
+				Content: config.Notice,
+			})
+		}
+
+		//播放声音
+		if config.VoiceEnable {
+			go notice.NewVoice(nil).Speak(config.Voice)
+		}
 
 		break
 
@@ -125,18 +149,30 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 
 var (
 	DefaultConfig = &Config{
-		Retry:     3,
-		Coroutine: 20,
-		Dir:       "./",
-		Suffix:    ".ts",
+		Retry:        3,
+		Coroutine:    20,
+		Dir:          "./",
+		Suffix:       ".ts",
+		ProxyEnable:  false,
+		Proxy:        "http://127.0.0.1:1081",
+		NoticeEnable: true,
+		Notice:       "主人. 您的视频已下载结束",
+		VoiceEnable:  true,
+		Voice:        "主人. 您的视频已下载结束",
 	}
 )
 
 type Config struct {
-	Retry     uint
-	Coroutine uint
-	Dir       string
-	Suffix    string
+	Retry        uint
+	Coroutine    uint
+	Dir          string
+	Suffix       string
+	ProxyEnable  bool
+	Proxy        string
+	NoticeEnable bool
+	Notice       string
+	VoiceEnable  bool
+	Voice        string
 }
 
 type Info struct {
