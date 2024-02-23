@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/injoyai/base/maps"
 	"github.com/injoyai/downloader/logic"
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/str/bar"
@@ -30,29 +29,15 @@ func main() {
 			}
 			ctx := context.Background()
 			length := int64(0)
-			start := time.Now()
-			cache := maps.NewValue(0, time.Millisecond)
 			b := bar.NewWithContext(ctx, 100)
 			b.SetColor(color.BgCyan)
 			b.SetFormatter(func(e *bar.Format) string {
-				return fmt.Sprintf("\r%s  %s  %s",
+				f1, unit1 := oss.Size(length)
+				return fmt.Sprintf("\r%s  %s  %s  %s",
 					e.Bar,
 					e.Size,
-					func() string {
-						if v, ok := cache.Val(); ok {
-							return v.(string)
-						}
-
-						f, unit := oss.Size(int64(float64(length) / time.Now().Sub(start).Seconds()))
-						if f < 0 {
-							f, unit = 0, "B"
-						}
-						s := fmt.Sprintf("%0.1f%s/s", f, unit)
-						if f > 0 {
-							cache = maps.NewValue(s, time.Millisecond*500)
-						}
-						return s
-					}(),
+					fmt.Sprintf("%0.1f%s", f1, unit1),
+					b.Speed("speed", length, time.Millisecond*500),
 				)
 			})
 			logs.PrintErr(logic.Download(
@@ -70,21 +55,6 @@ func main() {
 			))
 		},
 	}
-
-	//root.AddCommand(
-	//	&cobra.Command{
-	//		Use: "config",
-	//		Run: func(cmd *cobra.Command, args []string) {
-	//			fmt.Println(logic.DefaultConfig)
-	//		},
-	//	},
-	//	&cobra.Command{
-	//		Use: "set",
-	//		Run: func(cmd *cobra.Command, args []string) {
-	//			fmt.Println(logic.DefaultConfig)
-	//		},
-	//	},
-	//)
 
 	logs.PrintErr(root.Execute())
 }

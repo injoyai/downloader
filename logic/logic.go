@@ -9,7 +9,6 @@ import (
 	"github.com/injoyai/goutil/notice"
 	"github.com/injoyai/goutil/oss"
 	"github.com/injoyai/goutil/task"
-	"github.com/injoyai/logs"
 	"io"
 	"io/fs"
 	"os"
@@ -66,7 +65,6 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 		oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
 			if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
 				doneName[info.Name()] = true
-				logs.Debug(info.Name())
 			}
 			return true, nil
 		})
@@ -88,13 +86,13 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 			filename := fmt.Sprintf("%05d"+config.Suffix, i)
 			if doneName[filename] {
 				//过滤已经下载过的分片
-				//fn(ctx, &task.DownloadItemResp{
-				//	Index: i,
-				//})
-				//continue
+				fn(ctx, &task.DownloadItemResp{
+					Index: i,
+				})
+				continue
 			}
 			//继续下载没有下载过的分片
-			t.Append(v)
+			t.Set(i, v)
 		}
 
 		//新建任务
