@@ -56,7 +56,6 @@ func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 	b := bar.NewWithContext(ctx, 0)
 	b.SetColor(color.BgCyan)
 	b.SetFormatter(func(e *bar.Format) string {
-		//return e.M3u8(current)
 		return fmt.Sprintf("\r%s  %s  %s  %s",
 			e.Bar,
 			e.RateSize,
@@ -71,6 +70,7 @@ func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 		func(i *logic.Info) *logic.Info {
 			b.SetTotal(i.Total)
 			go b.Run()
+			i.Name = flags.GetString("name")
 			i.Retry = flags.GetUint("retry")
 			i.Coroutine = flags.GetUint("coroutine")
 			i.Dir = flags.GetString("dir")
