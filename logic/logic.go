@@ -54,7 +54,7 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 
 		//设置代理
 		if config.ProxyEnable {
-			http.SetProxy(config.Proxy)
+			http.SetProxy(config.ProxyAddress)
 		}
 
 		//分片目录
@@ -129,13 +129,13 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 		if config.NoticeEnable {
 			notice.NewWindows().Publish(&notice.Message{
 				Title:   "下载完成",
-				Content: config.Notice,
+				Content: config.NoticeText,
 			})
 		}
 
 		//播放声音
 		if config.VoiceEnable {
-			go notice.NewVoice(nil).Speak(config.Voice)
+			notice.NewVoice(nil).Speak(config.VoiceText)
 		}
 
 		break
@@ -152,11 +152,11 @@ var (
 		Dir:          "./",
 		Suffix:       ".ts",
 		ProxyEnable:  false,
-		Proxy:        "http://127.0.0.1:1081",
+		ProxyAddress: "http://127.0.0.1:1081",
 		NoticeEnable: true,
-		Notice:       "主人. 您的视频已下载结束",
+		NoticeText:   "主人. 您的视频已下载结束",
 		VoiceEnable:  true,
-		Voice:        "主人. 您的视频已下载结束",
+		VoiceText:    "主人. 您的视频已下载结束",
 	}
 )
 
@@ -166,11 +166,11 @@ type Config struct {
 	Dir          string
 	Suffix       string
 	ProxyEnable  bool
-	Proxy        string
+	ProxyAddress string
 	NoticeEnable bool
-	Notice       string
+	NoticeText   string
 	VoiceEnable  bool
-	Voice        string
+	VoiceText    string
 }
 
 type Info struct {
