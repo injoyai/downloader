@@ -22,9 +22,6 @@ import (
 //go:embed index.html
 var html string
 
-//go:embed index2.html
-var html2 string
-
 type gui struct {
 	lorca.APP
 	*cache.File
@@ -146,7 +143,7 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 			size += resp.GetSize()
 			rate := (float64(value) / float64(t.Len())) * 100
 			gui.SetBar(rate)
-			speed, speedUnit := oss.Size(size)
+			speed, speedUnit := oss.SizeUnit(size)
 			speed /= time.Since(start).Seconds()
 			gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s                                            %s", rate, speed, speedUnit, url))
 			if resp.Err != nil {
@@ -158,7 +155,7 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 		//_, err = resp.WriteToFile(filename)
 
 		spend := time.Now().Sub(start)
-		fSize, unit := oss.Size(size)
+		fSize, unit := oss.SizeUnit(size)
 		sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
 		spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
 		gui.SetLog(conv.SelectString(err == nil,
@@ -180,9 +177,9 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 
 func New(configPath, driverPath, browserPath string) error {
 	return lorca.Run(&lorca.Config{
-		Width:  610,
+		Width:  615,
 		Height: 500,
-		Html:   html2,
+		Html:   html,
 	}, func(app lorca.APP) error {
 
 		gui := &gui{

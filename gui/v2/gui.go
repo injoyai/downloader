@@ -15,6 +15,7 @@ import (
 	"github.com/injoyai/goutil/task"
 	"github.com/injoyai/logs"
 	"github.com/injoyai/lorca"
+	"github.com/injoyai/selenium"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -115,10 +116,10 @@ func (this *gui) findUrl(ctx context.Context) {
 			func(e *spider.Entity) {
 				e.SetRetry(1)
 			},
-		).Run(func(w *spider.WebDriver) error {
+		).Run(func(w *selenium.WebDriver) error {
 
 			logs.Debug("打开浏览器")
-			w.Open("https://www.google.com")
+			w.Get("https://www.google.com")
 
 			handler, err := w.CurrentWindowHandle()
 			if err != nil {
@@ -137,7 +138,7 @@ func (this *gui) findUrl(ctx context.Context) {
 
 }
 
-func (this *gui) findUrl2(ctx context.Context, wg *sync.WaitGroup, handlerMap *maps.Safe, w *spider.WebDriver, interval time.Duration) error {
+func (this *gui) findUrl2(ctx context.Context, wg *sync.WaitGroup, handlerMap *maps.Safe, w *selenium.WebDriver, interval time.Duration) error {
 	defer wg.Done()
 
 	timer := time.NewTimer(interval)
@@ -165,10 +166,10 @@ func (this *gui) findUrl2(ctx context.Context, wg *sync.WaitGroup, handlerMap *m
 				//}
 				handlerMap.GetOrSetByHandler(handler, func() (interface{}, error) {
 					logs.Debug(handler)
-					w2 := w.NewSeesion(handler)
+					//w2 := w.NewSeesion(handler)
 					//w2.SwitchWindow()
 					wg.Add(1)
-					go this.findUrl2(ctx, wg, handlerMap, &spider.WebDriver{RemoteWD: w2}, interval)
+					go this.findUrl2(ctx, wg, handlerMap, w, interval)
 					return time.Now(), nil
 				})
 			}
@@ -254,25 +255,25 @@ func (this *Config) Download(ctx context.Context, gui *gui, url string) {
 		current := uint32(0)
 		size := int64(0)
 		start := time.Now()
-		t.SetLimit(this.CoroutineNum)
+		t.SetCoroutine(this.CoroutineNum)
 		t.SetRetry(this.RetryNum)
 		t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
 			value := atomic.AddUint32(&current, 1)
 			size += resp.GetSize()
 			rate := (float64(value) / float64(t.Len())) * 100
 			gui.SetBar(rate)
-			speed, speedUnit := oss.Size(size)
+			speed, speedUnit := oss.SizeUnit(size)
 			speed /= time.Since(start).Seconds()
 			gui.SetLog(fmt.Sprintf("%0.1f%%  %0.1f%s/s                                            %s", rate, speed, speedUnit, url))
 			if resp.Err != nil {
 				logs.Errf("分片(%d)下载失败: %s", resp.Index, resp.Err.Error())
 			}
 		})
-		resp := t.Download(ctx)
-		_, err = resp.WriteToFile(filename)
+		//resp := t.Download(ctx)
+		//_, err = resp.WriteToFile(filename)
 
 		spend := time.Now().Sub(start)
-		fSize, unit := oss.Size(size)
+		fSize, unit := oss.SizeUnit(size)
 		sizeStr := fmt.Sprintf("%0.2f%s", fSize, unit)
 		spendStr := fmt.Sprintf("%0.1f%s/s", fSize/spend.Seconds(), unit)
 		gui.SetLog(conv.SelectString(err == nil,

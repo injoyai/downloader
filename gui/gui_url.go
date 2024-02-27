@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -22,10 +23,10 @@ func RegexpAll(s string) []string {
 
 type Element interface {
 	PageSource() (string, error)
-	FindElements(by, value string) ([]selenium.WebElement, error)
+	FindElements(by, value string) ([]*selenium.WebElement, error)
 }
 
-func (this *Config) deepFindElement(e selenium.WebElement) ([]string, error) {
+func (this *Config) deepFindElement(e *selenium.WebElement) ([]string, error) {
 	text, err := e.Text()
 	if err != nil {
 		return nil, err
@@ -87,12 +88,12 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 	logs.Debug("浏览器位置: ", browserPath)
 	logs.Debug("开始爬取: ", u)
 	if err := spider.New(driverPath, browserPath).
-		ShowWindow(false).ShowImg(false).Run(func(w *spider.WebDriver) (err error) {
+		ShowWindow(false).ShowImg(false).Run(func(w *selenium.WebDriver) (err error) {
 
 		g.Recover(&err)
 
-		g.PanicErr(w.Open(u))
-		w.WaitSec(3)
+		g.PanicErr(w.Get(u))
+		<-time.After(time.Second * 3)
 
 		title, err := w.Text()
 		g.PanicErr(err)
@@ -100,18 +101,18 @@ func (this *Config) FindUrlWithSelenium(driverPath, browserPath string) (urls []
 		logs.Debug("网站标题: ", title)
 
 		//获取接口资源
-		resource, err := newResource(u, title, w.WebDriver)
+		resource, err := newResource(u, title, w)
 		logs.Debug("接口名称: ", resource.Name())
 
 		//前置操作
-		g.PanicErr(resource.Before(w.WebDriver))
+		g.PanicErr(resource.Before(w))
 
 		//正则匹配数据,包括iframe
-		urls, err = this.deepFind(w.WebDriver)
+		urls, err = this.deepFind(w)
 		g.PanicErr(err)
 
 		// 后置操作
-		urls, err = resource.Deal(w.WebDriver, urls)
+		urls, err = resource.Deal(w, urls)
 		g.PanicErr(err)
 
 		return nil

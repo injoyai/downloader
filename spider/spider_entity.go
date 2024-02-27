@@ -127,9 +127,9 @@ func (this *Entity) Debug(b ...bool) *Entity {
 }
 
 // Run 执行,记得保留加载时间
-func (this *Entity) Run(f func(w *WebDriver) error, option ...selenium.ServiceOption) error {
+func (this *Entity) Run(f func(w *selenium.WebDriver) error, option ...selenium.ServiceOption) error {
 
-	selenium.SetDebug(this.seleniumDebug)
+	selenium.Debug(this.seleniumDebug)
 	serviceOption := []selenium.ServiceOption{
 		selenium.Output(logs.DefaultErr),
 	}
@@ -175,5 +175,5 @@ func (this *Entity) Run(f func(w *WebDriver) error, option ...selenium.ServiceOp
 	}
 	defer web.Close()
 
-	return g.Retry(func() error { return f(&WebDriver{web}) }, this.retry)
+	return g.Retry(func() error { return f(web) }, this.retry)
 }

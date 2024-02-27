@@ -38,20 +38,21 @@ func main() {
 		Run: handler,
 	}
 
-	logs.PrintErr(root.ParesFlags().Execute())
+	logs.PrintErr(root.Execute())
 }
 
 func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 	if len(args) == 0 {
-		//测试
-		args = []string{"http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8"}
-	}
-	if len(args) == 0 {
 		fmt.Println("无下载地址")
 		return
 	}
-	ctx := context.Background()
+	if args[0] == "test" {
+		//测试
+		args = []string{"http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8"}
+	}
 
+	ctx := context.Background()
+	sum := int64(0)
 	current := int64(0)
 	b := bar.NewWithContext(ctx, 0)
 	b.SetColor(color.BgCyan)
@@ -59,8 +60,8 @@ func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 		return fmt.Sprintf("\r%s  %s  %s  %s",
 			e.Bar,
 			e.RateSize,
-			oss.SizeString(current),
-			b.Speed("speed", current, time.Millisecond*500),
+			oss.SizeString(sum),
+			b.SpeedUnit("speed", current, time.Millisecond*500),
 		)
 	})
 
@@ -84,6 +85,7 @@ func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 			return i
 		}, func(ctx context.Context, resp *task.DownloadItemResp) {
 			current = resp.GetSize()
+			sum += current
 			b.Add(1)
 		},
 	))
