@@ -3,7 +3,6 @@ module github.com/injoyai/downloader
 go 1.16
 
 require (
-	github.com/fatih/color v1.14.1
 	github.com/injoyai/base v1.0.7
 	github.com/injoyai/conv v1.1.2
 	github.com/injoyai/goutil v0.0.0-20240226075830-06e0e7223723

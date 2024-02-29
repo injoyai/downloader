@@ -2,7 +2,6 @@ package gui
 
 import (
 	"github.com/injoyai/downloader/protocol/m3u8"
-	"github.com/injoyai/downloader/protocol/mp4"
 	"github.com/injoyai/goutil/str"
 	"github.com/injoyai/goutil/task"
 	"github.com/injoyai/logs"
@@ -33,9 +32,9 @@ func getTask(u string, resourceType string) (task []*task.Download, filename str
 		suffix = Ts
 		task, err = m3u8.NewTask(u)
 
-	case resourceType == Mp4 || (len(resourceType) == 0 && strings.HasSuffix(base.Path, Mp4)):
-		suffix = Mp4
-		task = mp4.NewTask(u)
+	//case resourceType == Mp4 || (len(resourceType) == 0 && strings.HasSuffix(base.Path, Mp4)):
+	//	suffix = Mp4
+	//	task = mp4.NewTask(u)
 
 	default:
 		suffix = Ts
