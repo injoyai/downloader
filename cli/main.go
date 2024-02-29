@@ -12,6 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	Debug   = "true"
+	testUrl = "http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8"
+)
+
 func main() {
 
 	logs.SetWriter(logs.Stdout)
@@ -43,8 +48,11 @@ func main() {
 
 func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 	if len(args) == 0 {
-		fmt.Println("无下载地址")
-		return
+		if !conv.Bool(Debug) {
+			fmt.Println("无下载地址")
+			return
+		}
+		args = append(args, testUrl)
 	}
 	switch args[0] {
 	case "registerUrlProtocol":
@@ -52,11 +60,11 @@ func handler(cmd *cobra.Command, args []string, flags *command.Flags) {
 		return
 
 	case "test":
-		args[0] = "http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear2/prog_index.m3u8"
+		args[0] = testUrl
 	}
 
 	cfg := &logic.Config{
-		Source:       args[0],
+		Resource:     args[0],
 		Dir:          flags.GetString("dir"),
 		Name:         flags.GetString("name"),
 		Retry:        flags.GetUint("retry"),

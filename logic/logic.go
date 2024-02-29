@@ -3,7 +3,6 @@ package logic
 import (
 	"context"
 	"fmt"
-	"github.com/fatih/color"
 	"github.com/injoyai/conv"
 	"github.com/injoyai/downloader/protocol/m3u8"
 	"github.com/injoyai/goutil/g"
@@ -29,7 +28,7 @@ type (
 
 func Download(ctx context.Context, op *Config) error {
 
-	u, err := url.Parse(op.Source)
+	u, err := url.Parse(op.Resource)
 	if err != nil {
 		return err
 	}
@@ -73,14 +72,13 @@ func Download(ctx context.Context, op *Config) error {
 
 func download(ctx context.Context, op *Config) error {
 
-	resp := http.Get(op.Source)
+	resp := http.Get(op.Resource)
 	if resp.Err() != nil {
 		return resp.Err()
 	}
 	defer resp.Body.Close()
 
 	b := bar.NewWithContext(ctx, resp.ContentLength)
-	b.SetColor(color.BgCyan)
 	go b.Run()
 
 	f, err := os.Create(op.Filename())
@@ -97,7 +95,7 @@ func download(ctx context.Context, op *Config) error {
 
 func downloadM3u8(ctx context.Context, op *Config) error {
 
-	resp, err := m3u8.NewResponse(op.Source)
+	resp, err := m3u8.NewResponse(op.Resource)
 	if err != nil {
 		return err
 	}
@@ -116,7 +114,6 @@ func downloadM3u8(ctx context.Context, op *Config) error {
 		sum := int64(0)
 		current := int64(0)
 		b := bar.NewWithContext(ctx, int64(len(list)))
-		b.SetColor(color.BgCyan)
 		b.SetFormatter(func(e *bar.Format) string {
 			return fmt.Sprintf("\r%s  %s  %s  %s",
 				e.Bar,
@@ -204,7 +201,7 @@ func downloadM3u8(ctx context.Context, op *Config) error {
 }
 
 type Config struct {
-	Source       string
+	Resource     string
 	Dir          string
 	Name         string
 	suffix       string
@@ -220,7 +217,7 @@ type Config struct {
 
 func (this *Config) GetName() string {
 	if len(this.Name) == 0 {
-		u, err := url.Parse(this.Source)
+		u, err := url.Parse(this.Resource)
 		if err == nil {
 			this.Name = strings.Split(path.Base(u.Path), ".")[0]
 		}
