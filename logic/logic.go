@@ -3,32 +3,101 @@ package logic
 import (
 	"context"
 	"fmt"
+	"github.com/fatih/color"
+	"github.com/injoyai/conv"
 	"github.com/injoyai/downloader/protocol/m3u8"
 	"github.com/injoyai/goutil/g"
 	"github.com/injoyai/goutil/net/http"
 	"github.com/injoyai/goutil/notice"
 	"github.com/injoyai/goutil/oss"
+	"github.com/injoyai/goutil/str/bar"
 	"github.com/injoyai/goutil/task"
-	"io"
+	"github.com/injoyai/io"
 	"io/fs"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type (
-	HandlerInfo func(i *Info) *Info
 	HandlerItem func(ctx context.Context, resp *task.DownloadItemResp)
 	HandlerDone func(ctx context.Context, name, source string, fn HandlerItem) error
 )
 
-func Download(ctx context.Context, source string, f1 HandlerInfo, fn HandlerItem) error {
-	return downloadM3u8(ctx, source, f1, fn)
+func Download(ctx context.Context, op *Config) error {
+
+	u, err := url.Parse(op.Source)
+	if err != nil {
+		return err
+	}
+
+	http.DefaultClient.SetTimeout(0)
+	if err := http.SetProxy(conv.SelectString(op.ProxyEnable, op.ProxyAddress, "")); err != nil {
+		return err
+	}
+
+	ext := path.Ext(u.Path)
+	switch ext {
+	case ".m3u8":
+		op.suffix = ".ts"
+		err = downloadM3u8(ctx, op)
+
+	default:
+		op.suffix = ext
+		err = download(ctx, op)
+
+	}
+
+	if err != nil {
+		return err
+	}
+
+	//提示消息
+	if op.NoticeEnable {
+		notice.NewWindows().Publish(&notice.Message{
+			Title:   "下载完成",
+			Content: op.NoticeText,
+		})
+	}
+
+	//播放声音
+	if op.VoiceEnable {
+		notice.NewVoice(nil).Speak(op.VoiceText)
+	}
+
+	return nil
 }
 
-func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn HandlerItem) error {
+func download(ctx context.Context, op *Config) error {
 
-	resp, err := m3u8.NewResponse(source)
+	resp := http.Get(op.Source)
+	if resp.Err() != nil {
+		return resp.Err()
+	}
+	defer resp.Body.Close()
+
+	b := bar.NewWithContext(ctx, resp.ContentLength)
+	b.SetColor(color.BgCyan)
+	go b.Run()
+
+	f, err := os.Create(op.Filename())
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.CopyWithPlan(f, resp.Body, func(p *io.Plan) {
+		b.Add(int64(len(p.Bytes)))
+	})
+	return err
+}
+
+func downloadM3u8(ctx context.Context, op *Config) error {
+
+	resp, err := m3u8.NewResponse(op.Source)
 	if err != nil {
 		return err
 	}
@@ -44,26 +113,27 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 
 	for _, list := range lists {
 
-		//获取配置
-		config := f1(&Info{
-			Total:   int64(len(lists[0])),
-			Current: 0,
-			Name:    resp.Name(),
-			Config:  DefaultConfig,
+		sum := int64(0)
+		current := int64(0)
+		b := bar.NewWithContext(ctx, int64(len(list)))
+		b.SetColor(color.BgCyan)
+		b.SetFormatter(func(e *bar.Format) string {
+			return fmt.Sprintf("\r%s  %s  %s  %s",
+				e.Bar,
+				e.RateSize,
+				oss.SizeString(sum),
+				b.SpeedUnit("speed", current, time.Millisecond*500),
+			)
 		})
-
-		//设置代理
-		if config.ProxyEnable {
-			http.SetProxy(config.ProxyAddress)
-		}
+		go b.Run()
 
 		//分片目录
-		cacheDir := filepath.Join(config.Dir, config.Name)
+		cacheDir := op.TempDir()
 
 		//查看已经下载的分片
 		doneName := map[string]bool{}
 		oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
-			if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
+			if !info.IsDir() && strings.HasSuffix(info.Name(), op.suffix) {
 				doneName[info.Name()] = true
 			}
 			return true, nil
@@ -71,24 +141,24 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 
 		//新建下载任务
 		t := task.NewDownload()
-		t.SetCoroutine(config.Coroutine)
-		t.SetRetry(config.Retry)
+		t.SetCoroutine(op.Coroutine)
+		t.SetRetry(op.Retry)
 		t.SetDoneItem(func(ctx context.Context, resp *task.DownloadItemResp) {
 			if resp.Err == nil {
 				//保存分片到文件夹,5位长度,最大99999分片,大于99999视频会乱序
-				filename := fmt.Sprintf("%05d"+config.Suffix, resp.Index)
+				filename := fmt.Sprintf("%05d"+op.suffix, resp.Index)
 				filename = filepath.Join(cacheDir, filename)
 				g.Retry(func() error { return oss.New(filename, resp.Bytes) }, 3)
 			}
-			fn(ctx, resp)
+			current = resp.GetSize()
+			sum += current
+			b.Add(1)
 		})
 		for i, v := range list {
-			filename := fmt.Sprintf("%05d"+config.Suffix, i)
+			filename := fmt.Sprintf("%05d"+op.suffix, i)
 			if doneName[filename] {
 				//过滤已经下载过的分片
-				fn(ctx, &task.DownloadItemResp{
-					Index: i,
-				})
+				b.Add(1)
 				continue
 			}
 			//继续下载没有下载过的分片
@@ -101,7 +171,7 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 			return doneResp.Err
 		}
 		//合并视频,删除分片等信息
-		totalFile, err := os.Create(cacheDir + config.Suffix)
+		totalFile, err := os.Create(op.Filename())
 		if err != nil {
 			return err
 		}
@@ -109,7 +179,7 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 		//合并视频
 		g.Retry(func() error {
 			return oss.RangeFileInfo(cacheDir, func(info fs.FileInfo) (bool, error) {
-				if !info.IsDir() && strings.HasSuffix(info.Name(), config.Suffix) {
+				if !info.IsDir() && strings.HasSuffix(info.Name(), op.suffix) {
 					f, err := os.Open(filepath.Join(cacheDir, info.Name()))
 					if err != nil {
 						return false, err
@@ -121,22 +191,10 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 				return true, nil
 			})
 		}, 3)
+		totalFile.Close()
 
 		//删除文件夹和分片视频
 		oss.DelDir(cacheDir)
-
-		//提示消息
-		if config.NoticeEnable {
-			notice.NewWindows().Publish(&notice.Message{
-				Title:   "下载完成",
-				Content: config.NoticeText,
-			})
-		}
-
-		//播放声音
-		if config.VoiceEnable {
-			notice.NewVoice(nil).Speak(config.VoiceText)
-		}
 
 		break
 
@@ -145,26 +203,13 @@ func downloadM3u8(ctx context.Context, source string, f1 HandlerInfo, fn Handler
 	return nil
 }
 
-var (
-	DefaultConfig = &Config{
-		Retry:        3,
-		Coroutine:    20,
-		Dir:          "./",
-		Suffix:       ".ts",
-		ProxyEnable:  false,
-		ProxyAddress: "http://127.0.0.1:1081",
-		NoticeEnable: true,
-		NoticeText:   "主人. 您的视频已下载结束",
-		VoiceEnable:  true,
-		VoiceText:    "主人. 您的视频已下载结束",
-	}
-)
-
 type Config struct {
+	Source       string
+	Dir          string
+	Name         string
+	suffix       string
 	Retry        uint
 	Coroutine    uint
-	Dir          string
-	Suffix       string
 	ProxyEnable  bool
 	ProxyAddress string
 	NoticeEnable bool
@@ -173,9 +218,23 @@ type Config struct {
 	VoiceText    string
 }
 
-type Info struct {
-	Total   int64
-	Current int64
-	Name    string
-	*Config
+func (this *Config) GetName() string {
+	if len(this.Name) == 0 {
+		u, err := url.Parse(this.Source)
+		if err == nil {
+			this.Name = strings.Split(path.Base(u.Path), ".")[0]
+		}
+	}
+	if len(this.Name) == 0 {
+		this.Name = time.Now().Format("20060102150405")
+	}
+	return this.Name
+}
+
+func (this *Config) Filename() string {
+	return filepath.Join(this.Dir, this.GetName()+this.suffix)
+}
+
+func (this *Config) TempDir() string {
+	return filepath.Join(this.Dir, this.GetName())
 }
